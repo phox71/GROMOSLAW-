@@ -1,30 +1,33 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
-import os
-import time
-import math
-import copy
+import os, time, math, copy
 from PIL import Image, ImageTk
-from shapely.geometry import Polygon
-from shapely.ops import unary_union
+from shapely.geometry import Polygon, Point
+from shapely.ops import unary_union, nearest_points
 from engine_data import Hotpoint, WalkableArea, GamifikatorProject
 
 class GamifikatorEditor:
     def __init__(self, root):
         self.root = root
-        self.root.title("GAMIFIKATOR 2026 - v1.2 [ULTIMATE STABLE]")
+        self.root.title("GAMIFIKATOR 2026 - v1.5 [PRO STABLE]")
         self.root.geometry("1600x950")
         self.root.configure(bg="#121212")
         
         self.project = None
         self.current_room_id = None
         self.mode = "Select"
+        self.is_playing = False
+        
+        # Runtime State
+        self.player_runtime_pos = [0, 0]
+        self.player_target = [0, 0]
+        self.current_comments = [] # (text, end_time)
         
         # State & Undo
         self.undo_stack = []
         self.temp_points = []
         self.selected_object = None 
-        self.drag_data = {"x": 0, "y": 0, "obj": None, "mode": None}
+        self.drag_data = {"obj": None, "mode": None}
         self.view_scale = 1.0
         
         # Assets refs
@@ -37,21 +40,8 @@ class GamifikatorEditor:
         self.load_ui_assets()
         self.setup_ui()
         self.setup_canvas_events()
-        self.log("Gamifikator v1.2 gotowy. Wszystkie systemy przywrócone.")
-
-    def save_undo(self):
-        if not self.project: return
-        # Snapshot of the current rooms state
-        snapshot = copy.deepcopy(self.project.rooms)
-        self.undo_stack.append(snapshot)
-        if len(self.undo_stack) > 10: self.undo_stack.pop(0)
-
-    def undo(self, event=None):
-        if len(self.undo_stack) > 0:
-            self.project.rooms = self.undo_stack.pop()
-            self.refresh_obj_tree()
-            self.refresh_canvas()
-            self.log("Cofnięto zmianę (Undo).")
+        self.engine_loop()
+        self.log("System Gamifikator v1.5 zainicjalizowany.")
 
     def log(self, message):
         timestamp = time.strftime("%H:%M:%S")
@@ -81,15 +71,29 @@ class GamifikatorEditor:
         source = image.split(); R, G, B, A = 0, 1, 2, 3
         return Image.merge("RGBA", (source[R].point(lambda i: r), source[G].point(lambda i: g), source[B].point(lambda i: b), source[A]))
 
+    def save_undo(self):
+        if not self.project: return
+        self.undo_stack.append(copy.deepcopy(self.project.rooms))
+        if len(self.undo_stack) > 15: self.undo_stack.pop(0)
+
+    def undo(self, event=None):
+        if self.undo_stack:
+            self.project.rooms = self.undo_stack.pop()
+            self.refresh_obj_tree(); self.refresh_canvas(); self.log("Cofnięto zmianę.")
+
     def setup_ui(self):
-        # Toolbar
+        # 1. TOP TOOLBAR
         self.toolbar = tk.Frame(self.root, bg="#1e1e1e", height=50); self.toolbar.pack(side=tk.TOP, fill=tk.X)
         btn_s = {"bg": "#1e1e1e", "fg": "#eee", "relief": tk.FLAT, "font": ("Segoe UI", 9)}
         tk.Button(self.toolbar, text="PROJECT", command=self.new_project_dialog, **btn_s).pack(side=tk.LEFT, padx=10)
         tk.Button(self.toolbar, text="OPEN", command=self.open_project, **btn_s).pack(side=tk.LEFT, padx=10)
         tk.Button(self.toolbar, text="SAVE", command=self.save_project, **btn_s).pack(side=tk.LEFT, padx=10)
         
-        # Main Split
+        self.btn_play = tk.Button(self.toolbar, text="\u25ba PLAY MODE", command=self.toggle_play, 
+                                 bg="#007acc", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"), padx=25)
+        self.btn_play.pack(side=tk.RIGHT, padx=10, pady=8)
+
+        # 2. MAIN SPLIT
         self.main_pane = tk.PanedWindow(self.root, orient=tk.VERTICAL, bg="#121212", sashwidth=4)
         self.main_pane.pack(fill=tk.BOTH, expand=True)
         self.workspace_frame = tk.Frame(self.main_pane, bg="#121212"); self.main_pane.add(self.workspace_frame, stretch="always")
@@ -104,6 +108,7 @@ class GamifikatorEditor:
 
         # Sidebar (Right)
         self.sidebar = tk.Frame(self.workspace_frame, bg="#1e1e1e", width=350); self.sidebar.pack(side=tk.RIGHT, fill=tk.Y)
+        
         tk.Label(self.sidebar, text="AVATAR", bg="#2d2d2d", fg="#aaa", font=("Segoe UI", 8, "bold"), pady=5).pack(fill=tk.X)
         tk.Button(self.sidebar, text="CONFIGURE AVATAR", command=self.open_player_settings, bg="#007acc", fg="white", relief=tk.FLAT).pack(fill=tk.X, padx=10, pady=5)
         
@@ -123,8 +128,9 @@ class GamifikatorEditor:
         self.warning_bar = tk.Label(self.cv_area, text="", bg="#8b0000", fg="white", font=("Segoe UI", 9, "bold")); self.warning_bar.pack(fill=tk.X)
         self.canvas = tk.Canvas(self.cv_area, bg="#000", highlightthickness=0); self.canvas.pack(expand=True)
 
-        # Console Panel
-        self.con_frame = tk.Frame(self.main_pane, bg="#1e1e1e", height=120); self.main_pane.add(self.con_frame, stretch="never")
+        # 3. CONSOLE PANEL
+        self.con_frame = tk.Frame(self.main_pane, bg="#1e1e1e", height=120)
+        self.main_pane.add(self.con_frame, stretch="never")
         log_h = tk.Frame(self.con_frame, bg="#2d2d2d"); log_h.pack(fill=tk.X)
         tk.Label(log_h, text="CONSOLE LOGS", bg="#2d2d2d", fg="#888", font=("Segoe UI", 7, "bold")).pack(side=tk.LEFT, padx=10)
         self.log_text = tk.Text(self.con_frame, bg="#000", fg="#00ff00", font=("Consolas", 9), state=tk.DISABLED, borderwidth=0); self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -134,21 +140,76 @@ class GamifikatorEditor:
         tk.Button(self.room_props_f, text="SET BACKGROUND PNG", command=self.select_background, bg="#007acc", fg="white", relief=tk.FLAT).pack(fill=tk.X, pady=5)
         
         self.wa_props_f = tk.Frame(self.prop_container, bg="#1e1e1e")
-        self.scale_min = tk.Scale(self.wa_props_f, from_=10, to=200, orient=tk.HORIZONTAL, label="MIN Y %", bg="#1e1e1e", fg="white"); self.scale_min.pack(fill=tk.X)
-        self.scale_max = tk.Scale(self.wa_props_f, from_=10, to=200, orient=tk.HORIZONTAL, label="MAX Y %", bg="#1e1e1e", fg="white"); self.scale_max.pack(fill=tk.X)
+        tk.Label(self.wa_props_f, text="WALKABLE SCALING", bg="#1e1e1e", fg="#C4A35A", font=("Segoe UI", 9, "bold")).pack(pady=5)
+        self.scale_min = tk.Scale(self.wa_props_f, from_=10, to=200, orient=tk.HORIZONTAL, label="MIN Y %", bg="#1e1e1e", fg="white", highlightthickness=0); self.scale_min.pack(fill=tk.X)
+        self.scale_max = tk.Scale(self.wa_props_f, from_=10, to=200, orient=tk.HORIZONTAL, label="MAX Y %", bg="#1e1e1e", fg="white", highlightthickness=0); self.scale_max.pack(fill=tk.X)
         tk.Button(self.wa_props_f, text="SAVE SCALING", command=self.save_wa_params, bg="#007acc", fg="white", relief=tk.FLAT).pack(fill=tk.X, pady=10)
 
         self.hp_props_f = tk.Frame(self.prop_container, bg="#1e1e1e")
-        tk.Button(self.hp_props_f, text="EDIT SETTINGS ⚙", command=lambda: self.open_hp_settings(None), bg="#333", fg="white", relief=tk.FLAT, pady=10).pack(fill=tk.X)
+        tk.Button(self.hp_props_f, text="EDIT HOTPOINT SETTINGS ⚙", command=lambda: self.open_hp_settings(None), bg="#333", fg="white", relief=tk.FLAT, pady=10).pack(fill=tk.X)
+
+    def engine_loop(self):
+        if self.is_playing and self.current_room_id:
+            # Player movement logic
+            dx = self.player_target[0] - self.player_runtime_pos[0]
+            dy = self.player_target[1] - self.player_runtime_pos[1]
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist > 5:
+                speed = self.project.player["walk_speed"]
+                self.player_runtime_pos[0] += (dx/dist) * speed
+                self.player_runtime_pos[1] += (dy/dist) * speed
+            # Comments cleanup
+            now = time.time()
+            self.current_comments = [c for c in self.current_comments if c[1] > now]
+            
+        self.refresh_canvas()
+        self.root.after(30, self.engine_loop)
+
+    def toggle_play(self):
+        if not self.current_room_id: return
+        self.is_playing = not self.is_playing
+        if self.is_playing:
+            self.btn_play.config(text="\u25fc STOP [ESC]", bg="#8b0000")
+            self.tool_frame.pack_forget(); self.sidebar.pack_forget(); self.con_frame.pack_forget()
+            room = self.project.rooms[self.current_room_id]
+            self.player_runtime_pos = list(room.get("player_pos", [960, 540]))
+            self.player_target = list(self.player_runtime_pos); self.current_comments = []
+        else:
+            self.btn_play.config(text="\u25ba PLAY MODE", bg="#007acc")
+            self.tool_frame.pack(side=tk.LEFT, fill=tk.Y, padx=1); self.sidebar.pack(side=tk.RIGHT, fill=tk.Y)
+            self.main_pane.add(self.con_frame, stretch="never")
+        self.refresh_canvas()
+
+    def handle_runtime_click(self, x, y):
+        room = self.project.rooms[self.current_room_id]
+        # 1. Hotpoints
+        for hp in reversed(room["hotpoints"]):
+            if hp.x <= x <= hp.x+hp.w and hp.y <= y <= hp.y+hp.h:
+                self.execute_hotpoint(hp); return
+        # 2. Walkable
+        target_pt = Point(x, y)
+        polys = [Polygon([(p.points[i], p.points[i+1]) for i in range(0, len(p.points), 2)]) for p in room["walkable"]]
+        if not polys: self.player_target = [x, y]; return
+        combined = unary_union(polys)
+        if combined.contains(target_pt): self.player_target = [x, y]
+        else:
+            nearest = nearest_points(combined, target_pt)[0]
+            self.player_target = [int(nearest.x), int(nearest.y)]
+
+    def execute_hotpoint(self, hp):
+        if hp.comments:
+            for i, line in enumerate(hp.comments):
+                self.root.after(i * 2000, lambda text=line: self.current_comments.append((text, time.time() + 2.0)))
 
     def open_player_settings(self):
         d = tk.Toplevel(self.root); d.title("Avatar Config"); d.geometry("600x750"); d.configure(bg="#1e1e1e"); d.grab_set()
+        tk.Label(d, text="DIRECTIONAL ANIMATIONS", bg="#1e1e1e", fg="#C4A35A", font=("Segoe UI", 10, "bold")).pack(pady=10)
         def row(k):
             f = tk.Frame(d, bg="#252526", pady=5); f.pack(fill=tk.X, padx=20, pady=2)
             tk.Label(f, text=k.upper(), width=10, bg="#252526", fg="white").pack(side=tk.LEFT)
             v = tk.StringVar(value=self.project.player["animations"].get(k, {}).get("path", ""))
             tk.Entry(f, textvariable=v, bg="#121212", fg="white").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-            tk.Button(f, text="...", command=lambda: v.set(filedialog.askopenfilename() or v.get())).pack(side=tk.LEFT)
+            tk.Button(f, text="...", command=lambda: v.set(filedialog.askopenfilename(filetypes=[("PNG", "*.png")]) or v.get())).pack(side=tk.LEFT)
             fv = tk.BooleanVar(value=self.project.player["animations"].get(k, {}).get("flip", False))
             tk.Checkbutton(f, text="FLIP", variable=fv, bg="#252526", fg="white", selectcolor="#000").pack(side=tk.LEFT, padx=5); return v, fv
         rows = {k: row(k) for k in ["idle", "walk_r", "walk_u", "walk_d"]}
@@ -160,11 +221,12 @@ class GamifikatorEditor:
             self.project.player["scale"], self.project.player["walk_speed"] = sc_s.get(), sp_s.get()
             if self.current_room_id and "player_pos" not in self.project.rooms[self.current_room_id]: self.project.rooms[self.current_room_id]["player_pos"] = [500, 500]
             self.refresh_canvas(); d.destroy()
-        tk.Button(d, text="SAVE", command=save, bg="#007acc", fg="white", pady=15).pack(fill=tk.X, padx=30, pady=20)
+        tk.Button(d, text="SAVE & SPAWN", command=save, bg="#007acc", fg="white", pady=15).pack(fill=tk.X, padx=30, pady=30)
 
     def on_canvas_down(self, event):
         if not self.current_room_id: return
         x, y = int(event.x / self.view_scale), int(event.y / self.view_scale); room = self.project.rooms[self.current_room_id]
+        if self.is_playing: self.handle_runtime_click(x, y); return
         if self.mode == "Select":
             if "player_pos" in room:
                 px, py = room["player_pos"]; s = self.project.player.get("scale", 100)/100.0
@@ -175,6 +237,8 @@ class GamifikatorEditor:
                 if hp.x+hp.w-15 <= x <= hp.x+hp.w+10 and hp.y+hp.h-15 <= y <= hp.y+hp.h+10:
                     self.drag_data = {"mode": "resize", "obj": hp, "start_w": hp.w, "start_h": hp.h, "start_x": x, "start_y": y}
                     self.selected_object = {"type": "hp", "idx": real_idx}; self.show_props("hp"); return
+                if hp.x+hp.w-25 <= x <= hp.x+hp.w and hp.y <= y <= hp.y+25:
+                    self.open_hp_settings(hp); return
                 if hp.x <= x <= hp.x+hp.w and hp.y <= y <= hp.y+hp.h:
                     self.drag_data = {"mode": "move", "obj": hp, "off_x": x - hp.x, "off_y": y - hp.y}
                     self.selected_object = {"type": "hp", "idx": real_idx}; self.show_props("hp"); self.refresh_canvas(); return
@@ -184,7 +248,7 @@ class GamifikatorEditor:
             self.selected_object = None; self.show_props("room"); self.refresh_canvas()
         elif self.mode == "Hotpoint":
             self.save_undo()
-            new_hp = Hotpoint(id=f"hotpoint_{len(room['hotpoints'])+1}", x=x, y=y, w=10, h=10)
+            new_hp = Hotpoint(id=f"hp_{len(room['hotpoints'])+1}", x=x, y=y, w=10, h=10)
             room["hotpoints"].append(new_hp); self.selected_object = {"type": "hp", "idx": len(room["hotpoints"])-1}
             self.drag_data = {"mode": "resize", "obj": new_hp, "start_w": 0, "start_h": 0, "start_x": x, "start_y": y}
             self.refresh_canvas(); self.refresh_obj_tree()
@@ -202,17 +266,15 @@ class GamifikatorEditor:
 
     def finish_polygon(self):
         if len(self.temp_points) >= 6:
-            self.save_undo()
-            new_pts = self.temp_points[:]; room = self.project.rooms[self.current_room_id]
+            self.save_undo(); room = self.project.rooms[self.current_room_id]
             try:
-                new_poly = Polygon([(new_pts[i], new_pts[i+1]) for i in range(0, len(new_pts), 2)])
+                new_poly = Polygon([(self.temp_points[i], self.temp_points[i+1]) for i in range(0, len(self.temp_points), 2)])
                 existing = [Polygon([(wa.points[j], wa.points[j+1]) for j in range(0, len(wa.points), 2)]) for wa in room["walkable"]]
                 merged = unary_union([new_poly] + existing)
                 room["walkable"] = []
                 if merged.geom_type == 'Polygon': self.add_shapely_poly(merged)
-                elif merged.geom_type == 'MultiPolygon': 
-                    for p in merged.geoms: self.add_shapely_poly(p)
-            except: room["walkable"].append(WalkableArea(id=f"wa_{int(time.time())}", points=new_pts))
+                elif merged.geom_type == 'MultiPolygon': [self.add_shapely_poly(p) for p in merged.geoms]
+            except: room["walkable"].append(WalkableArea(id=f"wa_{int(time.time())}", points=self.temp_points[:]))
             self.temp_points = []; self.refresh_canvas(); self.refresh_obj_tree()
 
     def add_shapely_poly(self, poly):
@@ -233,27 +295,31 @@ class GamifikatorEditor:
             s_t = [p*self.view_scale for p in self.temp_points]
             if len(s_t)>=4: self.canvas.create_line(s_t, fill="white", width=2)
             self.canvas.create_oval(s_t[0]-5, s_t[1]-5, s_t[0]+5, s_t[1]+5, fill="red")
-        if "player_pos" in room:
-            px, py = room["player_pos"]; is_sel = (self.selected_object and self.selected_object["type"] == "player")
-            p_img = self.player_placeholder_raw; idle = self.project.player["animations"].get("idle", {}).get("path", "")
-            if idle and os.path.exists(idle): p_img = Image.open(idle).convert("RGBA")
-            if p_img:
-                scale = self.project.player.get("scale", 100) / 100.0
-                p_img = p_img.resize((int(100*scale), int(100*scale)), Image.Resampling.LANCZOS)
-                self.player_image_ref = ImageTk.PhotoImage(p_img); self.canvas.create_image(px*self.view_scale, py*self.view_scale, image=self.player_image_ref, anchor="s")
-                if is_sel: self.canvas.create_rectangle((px-50*scale)*self.view_scale, (py-100*scale)*self.view_scale, (px+50*scale)*self.view_scale, py*self.view_scale, outline="#007acc", width=2)
-        for i, hp in enumerate(room["hotpoints"]):
-            is_sel = (self.selected_object and self.selected_object["type"] == "hp" and self.selected_object["idx"] == i)
-            x1, y1, x2, y2 = hp.x*self.view_scale, hp.y*self.view_scale, (hp.x+hp.w)*self.view_scale, (hp.y+hp.h)*self.view_scale
-            self.canvas.create_rectangle(x1, y1, x2, y2, outline="#007acc" if is_sel else "white", width=3 if is_sel else 1)
-            if is_sel: self.canvas.create_rectangle(x2-15, y2-15, x2, y2, fill="white"); self.canvas.create_text(x2-10, y1+10, text="⚙", fill="white", font=("Arial", 14, "bold"))
+        
+        px, py = (self.player_runtime_pos if self.is_playing else room.get("player_pos", [960, 540]))
+        is_sel = (not self.is_playing and self.selected_object and self.selected_object["type"] == "player")
+        p_img = self.player_placeholder_raw; idle = self.project.player["animations"].get("idle", {}).get("path", "")
+        if idle and os.path.exists(idle): p_img = Image.open(idle).convert("RGBA")
+        if p_img:
+            scale = self.project.player.get("scale", 100) / 100.0
+            p_img = p_img.resize((int(100*scale), int(100*scale)), Image.Resampling.LANCZOS)
+            self.player_image_ref = ImageTk.PhotoImage(p_img); self.canvas.create_image(px*self.view_scale, py*self.view_scale, image=self.player_image_ref, anchor="s")
+            if is_sel: self.canvas.create_rectangle((px-50*scale)*self.view_scale, (py-100*scale)*scale, (px+50*scale)*self.view_scale, py*self.view_scale, outline="#007acc", width=2)
+        
+        if self.is_playing:
+            for c in self.current_comments: self.canvas.create_text(px*self.view_scale, (py-120)*self.view_scale, text=c[0], fill="white", font=("Segoe UI", 12, "bold"))
+        else:
+            for i, hp in enumerate(room["hotpoints"]):
+                is_sel = (self.selected_object and self.selected_object["type"] == "hp" and self.selected_object["idx"] == i)
+                x1, y1, x2, y2 = hp.x*self.view_scale, hp.y*self.view_scale, (hp.x+hp.w)*self.view_scale, (hp.y+hp.h)*self.view_scale
+                self.canvas.create_rectangle(x1, y1, x2, y2, outline="#007acc" if is_sel else "white", width=3 if is_sel else 1)
+                if is_sel: self.canvas.create_rectangle(x2-15, y2-15, x2, y2, fill="white"); self.canvas.create_text(x2-10, y1+10, text="⚙", fill="white", font=("Arial", 14, "bold"))
 
     def open_hp_settings(self, hp=None):
-        if not hp and self.selected_object and self.selected_object["type"] == "hp":
-            hp = self.project.rooms[self.current_room_id]["hotpoints"][self.selected_object["idx"]]
+        if not hp and self.selected_object and self.selected_object["type"] == "hp": hp = self.project.rooms[self.current_room_id]["hotpoints"][self.selected_object["idx"]]
         if not hp: return
-        d = tk.Toplevel(self.root); d.title(f"Hotpoint: {hp.id}"); d.geometry("500x850"); d.grab_set(); d.configure(bg="#1e1e1e")
-        def lbl(t): tk.Label(d, text=t, bg="#1e1e1e", fg="#C4A35A", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=20, pady=(10,0))
+        d = tk.Toplevel(self.root); d.title(f"Settings: {hp.id}"); d.geometry("500x850"); d.grab_set(); d.configure(bg="#1e1e1e")
+        def lbl(t): tk.Label(d, text=t, bg="#1e1e1e", fg="#C4A35A", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=20, pady=(15,0))
         lbl("ACTION TYPE")
         act_v = tk.StringVar(value=hp.action); tk.OptionMenu(d, act_v, "comment", "pick_up", "talk_to", "lock", "move_to").pack(fill=tk.X, padx=20)
         lbl("ITEM REQUIRED")
@@ -285,23 +351,23 @@ class GamifikatorEditor:
         sel = self.room_listbox.curselection()
         if sel: self.current_room_id = list(self.project.rooms.keys())[sel[0]]; self.refresh_obj_tree(); self.refresh_canvas()
     def add_room(self):
-        n = simpledialog.askstring("Name", "Scene Name:")
+        n = simpledialog.askstring("Scene", "Name:")
         if n: rid = f"room_{int(time.time())}"; self.project.rooms[rid] = {"name": n, "background": "", "hotpoints": [], "walkable": [], "player_pos": [960, 540]}; self.refresh_room_list()
     def refresh_room_list(self):
         self.room_listbox.delete(0, tk.END); [self.room_listbox.insert(tk.END, r["name"]) for r in self.project.rooms.values()]
     def refresh_obj_tree(self):
         self.obj_tree.delete(*self.obj_tree.get_children())
-        if not self.current_room_id: return
-        room = self.project.rooms[self.current_room_id]
-        if "player_pos" in room: self.obj_tree.insert("", "end", iid="player", text="PLAYER AVATAR")
-        for i, wa in enumerate(room["walkable"]): self.obj_tree.insert("", "end", iid=f"wa_{i}", text=f"Area {i+1}")
-        for i, hp in enumerate(room["hotpoints"]): self.obj_tree.insert("", "end", iid=f"hp_{i}", text=hp.id, image=self.icons_ui.get("Edit_small"))
+        if self.current_room_id:
+            r = self.project.rooms[self.current_room_id]
+            if "player_pos" in r: self.obj_tree.insert("", "end", iid="player", text="PLAYER")
+            for i, wa in enumerate(r["walkable"]): self.obj_tree.insert("", "end", iid=f"wa_{i}", text=f"Area {i+1}")
+            for i, hp in enumerate(r["hotpoints"]): self.obj_tree.insert("", "end", iid=f"hp_{i}", text=hp.id, image=self.icons_ui.get("Edit_small"))
     def on_obj_tree_select(self, e):
         sel = self.obj_tree.selection()
         if sel: sid = sel[0]; self.selected_object = {"type": "player" if sid == "player" else ("wa" if sid.startswith("wa_") else "hp"), "idx": 0 if sid == "player" else int(sid[3:])}; self.refresh_canvas()
     def new_project_dialog(self):
         d = tk.Toplevel(self.root); d.title("NEW PROJECT"); d.geometry("350x250"); d.grab_set()
-        tk.Label(d, text="NAME:").pack(); ne = tk.Entry(d); ne.insert(0, "NewAdventure"); ne.pack()
+        tk.Label(d, text="NAME:").pack(); ne = tk.Entry(d); ne.insert(0, "NewGame"); ne.pack()
         tk.Label(d, text="RES:").pack(); rv = tk.StringVar(value="1920x1080"); tk.OptionMenu(d, rv, "1280x720", "1920x1080").pack()
         def confirm(): self.project = GamifikatorProject(ne.get(), rv.get()); self.init_workspace(); d.destroy()
         tk.Button(d, text="CREATE", command=confirm, bg="#007acc", fg="white").pack(pady=20)
@@ -315,8 +381,9 @@ class GamifikatorEditor:
         if p: self.project = GamifikatorProject.from_json(open(p, 'r').read()); self.init_workspace()
     def setup_canvas_events(self):
         self.canvas.bind("<Button-1>", self.on_canvas_down); self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
-        self.canvas.bind("<ButtonRelease-1>", lambda e: setattr(self, 'drag_data', {"x":0,"y":0,"obj":None,"mode":None}))
-        self.root.bind("<Control-z>", self.undo); self.root.bind("<Delete>", self.delete_selected)
+        self.canvas.bind("<ButtonRelease-1>", lambda e: setattr(self, 'drag_data', {"obj":None,"mode":None}))
+        self.root.bind("<Control-z>", self.undo); self.root.bind("<Escape>", lambda e: self.toggle_play() if self.is_playing else None)
+        self.root.bind("<Delete>", self.delete_selected)
     def delete_selected(self, e):
         if self.selected_object and self.current_room_id:
             self.save_undo(); room = self.project.rooms[self.current_room_id]

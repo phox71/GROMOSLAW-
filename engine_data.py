@@ -8,7 +8,7 @@ class Hotpoint:
     y: int
     w: int
     h: int
-    action: str = "comment" # comment, pick_up, talk_to, lock, move_to
+    action: str = "comment"
     item_req: str = "(none)"
     scale_png: int = 100
     is_locked: bool = False
@@ -28,7 +28,7 @@ class GamifikatorProject:
     def __init__(self, name="Nowy Projekt", resolution="1920x1080"):
         self.name = name
         self.resolution = resolution
-        self.rooms = {} # id: {name, background, hotpoints: [], walkable: [], player_pos: [x,y]}
+        self.rooms = {} 
         self.items = {}
         self.player = {
             "animations": {
@@ -42,7 +42,6 @@ class GamifikatorProject:
         }
 
     def to_json(self):
-        # Recursive dict conversion for dataclasses
         def d_conv(o):
             if isinstance(o, (Hotpoint, WalkableArea)): return o.__dict__
             if isinstance(o, list): return [d_conv(i) for i in o]
@@ -55,7 +54,7 @@ class GamifikatorProject:
     @classmethod
     def from_json(cls, data_str):
         d = json.loads(data_str)
-        proj = cls(d["name"], d["resolution"])
+        proj = cls(d.get("name", "Brak"), d.get("resolution", "1920x1080"))
         proj.items = d.get("items", {})
         proj.player = d.get("player", proj.player)
         for rid, rdata in d.get("rooms", {}).items():
