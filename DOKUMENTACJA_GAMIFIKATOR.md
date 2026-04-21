@@ -1,48 +1,33 @@
 # DOKUMENTACJA TECHNICZNA - GAMIFIKATOR
-## Wersja: 0.1 (Szkielet + Pokoje)
+## Wersja: 1.2 (Ultimate Stable)
 ## Data: 2026-04-21
 
-### 1. Cel Projektu
-Silnik gier Point & Click na PC/Android/iOS. Inspirowany klasykami gatunku.
+### 1. Architektura Systemu
+- **editor.py**: Główny interfejs graficzny (Photoshop 2026 style).
+- **engine_data.py**: Klasy danych projektu (Dataclasses), logika serializacji JSON.
+- **Biblioteki**: Tkinter (GUI), Pillow (Grafika), Shapely (Geometria Walkable).
 
-### 2. Architektura
-- **Język:** Python 3.14
-- **GUI:** Tkinter + Pillow (PIL) dla zaawansowanej obsługi grafiki.
-- **Format Projektu:** `*.phx` (JSON).
+### 2. System Walkable (Obszary Chodzenia)
+- **Łączenie**: Automatyczne scalanie nachodzących na siebie wielokątów (unary_union).
+- **Snapping**: Przyciąganie punktów do startu przy odległości < 15px.
+- **Skalowanie Y**: Gradientowa zmiana wielkości bohatera (MIN/MAX %).
 
-### 3. Struktura Danych (PHX)
-```json
-{
-    "name": "Nazwa Projektu",
-    "resolution": "1920x1080",
-    "rooms": {
-        "room_id": {
-            "name": "Nazwa",
-            "background": "path/to/img.png",
-            "hotpoints": [],
-            "walkable": []
-        }
-    },
-    "items": {},
-    "start_room_id": ""
-}
-```
+### 3. System Hotpointów
+- **Akcje**: Comment, Pick up, Talk to, LOCK, Move to.
+- **Flow**: Możliwość ustawienia wielu reakcji (Unlock, Swap PNG, Dialog).
+- **Dialogi**: System wielu linii komentarzy z czasem wyświetlania.
 
-### 4. Interfejs (UI Design)
-- Stylistyka: Photoshop 2026 (Dark Theme).
-- Kolory: Background #181818, Panel #2b2b2b, Accent #007acc.
-- Narzędzia: Select (S), Walkable (W), Hotpoint (H).
+### 4. Player Avatar
+- **Animacje**: Obsługa 4 kierunków (Idle, Right, Up, Down).
+- **Mirroring**: Funkcja FLIP dla animacji lewo-prawo.
+- **Spawn**: Ustawianie pozycji startowej gracza bezpośrednio na płótnie metodą Drag&Drop.
 
-### ### 6. Walkable Areas
-Obszary, po których może poruszać się gracz.
-- Definiowane jako wielokąty (minimum 3 punkty).
-- Parametry:
-    - `scale_min`: Skalowanie (%) postaci na górnej krawędzi obszaru (oś Y).
-    - `scale_max`: Skalowanie (%) postaci na dolnej krawędzi obszaru (oś Y).
-- Funkcja: Zapewnia efekt perspektywy w grze 2D.
+### 5. Funkcje Edytora
+- **Undo (CTRL+Z)**: Historia 10 ostatnich zmian stanu sceny.
+- **Konsola**: Przesuwalny panel logów z funkcją kopiowania błędów.
+- **Usuwanie**: Klawisz DELETE usuwa zaznaczony obiekt (Player, HP, Area).
 
-### 7. Skróty Klawiszowe
-- **S:** Narzędzie Select
-- **W:** Narzędzie Walkable
-- **H:** Narzędzie Hotpoint
-- **Right Click:** Zakończ rysowanie wielokąta Walkable.
+### 6. Instrukcja Odtwarzania
+1. `pip install Pillow shapely`
+2. Uruchom `editor.py`.
+3. Projekt zapisywany w formacie `*.phx`.
