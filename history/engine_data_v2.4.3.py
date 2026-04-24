@@ -1,7 +1,14 @@
 import json
 
+class Item:
+    def __init__(self, id, name, icon_path=""):
+        self.id = id
+        self.name = name
+        self.icon_path = icon_path
+    def to_dict(self): return self.__dict__
+
 class Hotpoint:
-    def __init__(self, id, x, y, w=100, h=100, image_path="", swap_image_path="", action="comment", scale_png=100, opacity=100, flow=None, comments=None, comment_dur=2.0, comment_gap=0.5):
+    def __init__(self, id, x, y, w=100, h=100, image_path="", swap_image_path="", action="comment", scale_png=100, opacity=100, flow=None, comments=None, give_item_id="", require_item_id="", dialogue_id=""):
         self.id = id
         self.x, self.y, self.w, self.h = x, y, w, h
         self.image_path = image_path
@@ -11,8 +18,9 @@ class Hotpoint:
         self.opacity = opacity
         self.flow = flow or {"p_com": True, "h_com": False, "unlock": False, "swap": False, "move": False}
         self.comments = comments or []
-        self.comment_dur = comment_dur
-        self.comment_gap = comment_gap
+        self.give_item_id = give_item_id
+        self.require_item_id = require_item_id
+        self.dialogue_id = dialogue_id
     def to_dict(self): return self.__dict__
 
 class WalkableArea:
@@ -26,12 +34,12 @@ class GamifikatorProject:
         self.name = name
         self.resolution = resolution
         self.rooms = {}
-        self.sprites = {}  # {sprite_id: {"name": str, "path": str}}
-        self.animations = {}  # {anim_id: {"name": str, "sheet_path": str, "frames": int, "frame_w": int, "frame_h": int, "fps": int}}
-        self.scripts = {}  # {scr_id: {"name": str, "code": str, "scope": "global"|"room", "room_id": str, "trigger": "on_enter"|"on_exit"|"manual", "created": str}}
+        self.items = {} # Global items: {id: Item_dict}
+        self.dialogues = {} # Global dialogues: {id: Dialogue_dict}
         self.player = {
             "scale": 100,
             "walk_speed": 10,
+            "inventory": [], # List of item IDs
             "animations": {
                 "idle": {"path": "", "frames": 1},
                 "walk_r": {"path": "", "frames": 1},
@@ -47,8 +55,8 @@ class GamifikatorProject:
         d = json.loads(data)
         p = GamifikatorProject(d["name"], d.get("resolution", "1920x1080"))
         p.rooms = d["rooms"]
-        p.sprites = d.get("sprites", {})
-        p.animations = d.get("animations", {})
-        p.scripts = d.get("scripts", {})
+        p.items = d.get("items", {})
+        p.dialogues = d.get("dialogues", {})
         p.player = d.get("player", p.player)
+        if "inventory" not in p.player: p.player["inventory"] = []
         return p
