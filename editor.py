@@ -593,22 +593,12 @@ class GamifikatorEditor:
         tk.Button(src_bar, text="📂  ZAŁADUJ SPRITE SHEET", command=lambda: load_sheet(),
                   bg="#C4A35A", fg="black", relief=tk.FLAT,
                   font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=2)
-        tk.Button(src_bar, text="✂  AUTO-TRIM  +  WYKRYJ KLATKI", command=lambda: do_detect(),
-                  bg="#333", fg="white", relief=tk.FLAT).pack(side=tk.LEFT, padx=6)
+        tk.Button(src_bar, text="⚡  DOSTOSUJ AUTOMATYCZNIE", command=lambda: do_remove_bg_anim(),
+                  bg="#1a5c1a", fg="white", relief=tk.FLAT,
+                  font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
 
-        rhlbl("USUWANIE TŁA  (flood fill od krawędzi — nie nadpisuje pliku)")
-        bg_info_row = tk.Frame(rp, bg="#0d0d0d"); bg_info_row.pack(fill=tk.X, padx=4, pady=(0, 2))
-        tk.Label(bg_info_row, text="Wykryty kolor tła:", bg="#0d0d0d", fg="#aaa",
-                 font=("Segoe UI", 8)).pack(side=tk.LEFT)
-        ey_swatch = tk.Label(bg_info_row, text="   ", bg="#262626",
-                             relief=tk.SOLID, bd=1, width=3)
-        ey_swatch.pack(side=tk.LEFT, padx=6)
-        ey_lbl = tk.Label(bg_info_row, text="auto z narożników", bg="#0d0d0d",
-                          fg="#666", font=("Segoe UI", 8))
-        ey_lbl.pack(side=tk.LEFT)
-
-        tol_row = tk.Frame(rp, bg="#0d0d0d"); tol_row.pack(fill=tk.X, padx=4, pady=1)
-        tk.Label(tol_row, text="Tolerancja:", bg="#0d0d0d", fg="#aaa",
+        tol_row = tk.Frame(rp, bg="#0d0d0d"); tol_row.pack(fill=tk.X, padx=4, pady=(4, 1))
+        tk.Label(tol_row, text="Tolerancja usuwania tła:", bg="#0d0d0d", fg="#aaa",
                  font=("Segoe UI", 8)).pack(side=tk.LEFT)
         tol_val_lbl = tk.Label(tol_row, text="25", bg="#0d0d0d", fg="white",
                                font=("Segoe UI", 8, "bold"), width=3)
@@ -616,11 +606,7 @@ class GamifikatorEditor:
         tol_v = tk.IntVar(value=25)
         tk.Scale(rp, variable=tol_v, from_=0, to=100, orient=tk.HORIZONTAL,
                  bg="#0d0d0d", fg="white", showvalue=False,
-                 command=lambda v: tol_val_lbl.config(text=v)).pack(fill=tk.X, padx=4)
-        tk.Button(rp, text="🗑  REMOVE BG  (flood fill od krawędzi, ponownie wykryj klatki)",
-                  command=lambda: do_remove_bg_anim(),
-                  bg="#8b3a00", fg="white", relief=tk.FLAT,
-                  font=("Segoe UI", 8, "bold")).pack(fill=tk.X, padx=4, pady=(2, 6))
+                 command=lambda v: tol_val_lbl.config(text=v)).pack(fill=tk.X, padx=4, pady=(0, 6))
 
         rhlbl("WYKRYTE KLATKI  (identyczne kontenery, wyrównane do dołu — bez drgań)")
         fr_outer = tk.Frame(rp, bg="#0d0d0d", height=170)
@@ -697,7 +683,7 @@ class GamifikatorEditor:
             col_sums = alpha_arr.sum(axis=0)
             is_gap = (col_sums == 0)
             W = len(is_gap)
-            MIN_GAP = 3
+            MIN_GAP = 2
             gap_f = is_gap.copy()
             x = 0
             while x < W:
@@ -819,18 +805,20 @@ class GamifikatorEditor:
             from collections import deque
             data = np.array(st["img"].convert("RGBA"), dtype=np.uint8)
             h, w = data.shape[:2]
-            # auto-detect bg color: median of corner 5×5 patches
+            # auto-detect bg color: median of opaque corner pixels only
             cs = max(1, min(5, h // 6, w // 6))
-            samples = np.vstack([
-                data[:cs,    :cs,    :3].reshape(-1, 3),
-                data[:cs,    w-cs:,  :3].reshape(-1, 3),
-                data[h-cs:,  :cs,    :3].reshape(-1, 3),
-                data[h-cs:,  w-cs:,  :3].reshape(-1, 3),
+            corners = np.vstack([
+                data[:cs,    :cs,    :].reshape(-1, 4),
+                data[:cs,    w-cs:,  :].reshape(-1, 4),
+                data[h-cs:,  :cs,    :].reshape(-1, 4),
+                data[h-cs:,  w-cs:,  :].reshape(-1, 4),
             ])
-            bg = np.median(samples, axis=0)
+            opaque = corners[corners[:, 3] > 32]
+            if len(opaque) == 0:
+                status_v.set("Tło już przezroczyste — wykrywam klatki…")
+                do_detect(); return
+            bg = np.median(opaque[:, :3], axis=0)
             hx = "#{:02x}{:02x}{:02x}".format(int(bg[0]), int(bg[1]), int(bg[2]))
-            ey_swatch.config(bg=hx)
-            ey_lbl.config(text=hx, fg="white")
             # flood fill from all 4 edges — only spreads through pixels similar to bg
             tol_sq = (tol_v.get() * 2.55) ** 2
             visited = np.zeros((h, w), dtype=bool)
@@ -857,8 +845,7 @@ class GamifikatorEditor:
                             q.append((ny, nx))
             st["img"] = Image.fromarray(result)
             removed = int((result[:, :, 3] == 0).sum())
-            status_v.set(f"Remove BG: usunięto {removed} px flood-fill od krawędzi "
-                         f"(tol={tol_v.get()}, kolor tła={hx}). Ponownie wykrywam klatki…")
+            status_v.set(f"DOSTOSUJ: usunięto {removed} px tła (tol={tol_v.get()}, kolor={hx}). Wykrywam klatki…")
             do_detect()
 
         def del_from_lib():
