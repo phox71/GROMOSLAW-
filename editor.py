@@ -2137,6 +2137,7 @@ class GamifikatorEditor:
                 self.player_image_ref = ImageTk.PhotoImage(p_img)
                 self.canvas.create_image(px * self.view_scale, py * self.view_scale,
                                          image=self.player_image_ref, anchor="s")
+                self._player_canvas_top = int(py * self.view_scale) - nh
                 if is_sel:
                     vs = self.view_scale
                     self.canvas.create_rectangle(
@@ -2161,9 +2162,11 @@ class GamifikatorEditor:
             self._placeholder_ref = ImageTk.PhotoImage(img)
             self.canvas.create_image(int(px*vs), int(py*vs),
                                       image=self._placeholder_ref, anchor="s")
+            self._player_canvas_top = int(py*vs) - target_h
         else:
             self.canvas.create_oval((px-10)*vs, (py-10)*vs,
                                      (px+10)*vs, (py+10)*vs, fill="white")
+            self._player_canvas_top = int(py*vs) - 20
 
     def refresh_canvas(self):
         self.canvas.delete("all")
@@ -2239,20 +2242,34 @@ class GamifikatorEditor:
                     width=2 if is_sel else 1)
 
     def _draw_dialogs(self, px, py):
+        if not self.current_room_id:
+            return
+        w, h = map(int, self.project.resolution.split('x'))
+        vs = self.view_scale
+        cw, ch = int(w * vs), int(h * vs)
+        BOX_W, BOX_H, GAP = 300, 28, 6
         for dg in self.active_dialogs:
             if dg["owner"] == "p":
-                tx, ty = px, py - 130
+                cx_px = int(px * vs)
+                top_px = getattr(self, '_player_canvas_top', int(py * vs) - 80)
             else:
-                cx, cy = self.get_hp_center(dg["hp_id"])
-                tx, ty = cx, cy - 40
-            vs = self.view_scale
+                gc_x, gc_y = self.get_hp_center(dg["hp_id"])
+                cx_px = int(gc_x * vs)
+                top_px = int(gc_y * vs)
+            box_bottom = top_px - GAP
+            box_top = box_bottom - BOX_H
+            if box_top < 4:
+                box_top = 4
+                box_bottom = box_top + BOX_H
+            half = BOX_W // 2
+            cx_px = max(half + 4, min(cx_px, cw - half - 4))
             self.canvas.create_rectangle(
-                tx*vs - 150, ty*vs - 22, tx*vs + 150, ty*vs + 4,
+                cx_px - half, box_top, cx_px + half, box_bottom,
                 fill="#111", outline="#444")
             self.canvas.create_text(
-                tx * vs, ty * vs - 8,
+                cx_px, (box_top + box_bottom) // 2,
                 text=dg["text"], fill="white",
-                font=("Segoe UI", 11, "bold"), justify="center", width=290)
+                font=("Segoe UI", 11, "bold"), justify="center", width=BOX_W - 10)
 
     def _draw_temp_polygon(self):
         st = [p * self.view_scale for p in self.temp_points]
@@ -2321,15 +2338,25 @@ class GamifikatorEditor:
 
         node = dlg["nodes"][nid]
         w, h = map(int, self.project.resolution.split('x'))
-        cw = int(w * self.view_scale)
-        ch = int(h * self.view_scale)
+        vs = self.view_scale
+        cw = int(w * vs)
+        ch = int(h * vs)
         phase = self.active_dialog["phase"]
 
         if phase == "npc":
             speaker = node.get("speaker", "NPC")
             text    = node.get("text", "")
             bw = int(cw * 0.65); bh = 88
-            bx = (cw - bw) // 2; by = ch - bh - 18
+            hp_id = dlg.get("hotpoint_id", "")
+            if hp_id:
+                gc_x, gc_y = self.get_hp_center(hp_id)
+                npc_cx = int(gc_x * vs)
+                npc_top = int(gc_y * vs)
+            else:
+                npc_cx = cw // 2
+                npc_top = ch
+            bx = max(8, min(npc_cx - bw // 2, cw - bw - 8))
+            by = max(8, min(npc_top - bh - 12, ch - bh - 8))
             # shadow
             self.canvas.create_rectangle(bx+4, by+4, bx+bw+4, by+bh+4,
                 fill="#000", outline="")
@@ -2369,8 +2396,13 @@ class GamifikatorEditor:
         elif phase == "choices":
             choices = [cid for cid in node.get("choices", []) if cid in dlg["nodes"]]
             bw = int(cw * 0.55); bh = 38; gap = 6
-            bx = (cw - bw) // 2
-            by_base = ch - len(choices) * (bh + gap) - 14
+            total_h = len(choices) * (bh + gap)
+            px_r, py_r = self.player_runtime_pos
+            cx_px = int(px_r * vs)
+            player_top = getattr(self, '_player_canvas_top', int(py_r * vs) - 80)
+            by_base = player_top - total_h - 14
+            by_base = max(8, min(by_base, ch - total_h - 8))
+            bx = max(8, min(cx_px - bw // 2, cw - bw - 8))
             rects = []
             for i, cid in enumerate(choices):
                 cn = dlg["nodes"][cid]
