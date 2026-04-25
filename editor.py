@@ -679,37 +679,46 @@ class GamifikatorEditor:
             show_frame(0)
 
         def _detect_frames(img):
-            alpha_arr = np.array(img.split()[3])
-            col_sums = alpha_arr.sum(axis=0)
-            is_gap = (col_sums == 0)
-            W = len(is_gap)
+            alpha = np.array(img.split()[3])
             MIN_GAP = 2
-            gap_f = is_gap.copy()
-            x = 0
-            while x < W:
-                if is_gap[x]:
-                    rs = x
-                    while x < W and is_gap[x]:
-                        x += 1
-                    if (x - rs) < MIN_GAP:
-                        gap_f[rs:x] = False
-                else:
-                    x += 1
-            frames = []; in_f = False; sx = 0
-            for x in range(W):
-                if not gap_f[x] and not in_f:
-                    in_f = True; sx = x
-                elif gap_f[x] and in_f:
-                    in_f = False; ew = x - sx
-                    slab = alpha_arr[:, sx:x]
+
+            def find_spans(sums):
+                is_gap = (sums == 0)
+                filt = is_gap.copy()
+                i = 0
+                while i < len(is_gap):
+                    if is_gap[i]:
+                        s = i
+                        while i < len(is_gap) and is_gap[i]:
+                            i += 1
+                        if (i - s) < MIN_GAP:
+                            filt[s:i] = False
+                    else:
+                        i += 1
+                spans = []; in_s = False; start = 0
+                for idx in range(len(filt)):
+                    if not filt[idx] and not in_s:
+                        in_s = True; start = idx
+                    elif filt[idx] and in_s:
+                        in_s = False
+                        if idx - start >= 4:
+                            spans.append((start, idx))
+                if in_s and len(filt) - start >= 4:
+                    spans.append((start, len(filt)))
+                return spans
+
+            strips = find_spans(alpha.sum(axis=1))
+            if not strips:
+                return []
+            frames = []
+            for (ys, ye) in strips:
+                strip = alpha[ys:ye, :]
+                for (xs, xe) in find_spans(strip.sum(axis=0)):
+                    slab = strip[:, xs:xe]
                     rows = np.where(slab.sum(axis=1) > 0)[0]
-                    if len(rows) and ew >= 4:
-                        frames.append((sx, int(rows[0]), ew, int(rows[-1]) - int(rows[0]) + 1))
-            if in_f:
-                ew = W - sx; slab = alpha_arr[:, sx:]
-                rows = np.where(slab.sum(axis=1) > 0)[0]
-                if len(rows) and ew >= 4:
-                    frames.append((sx, int(rows[0]), ew, int(rows[-1]) - int(rows[0]) + 1))
+                    if len(rows):
+                        frames.append((xs, ys + int(rows[0]), xe - xs,
+                                       int(rows[-1]) - int(rows[0]) + 1))
             return frames
 
         def show_frame(idx):
@@ -805,19 +814,20 @@ class GamifikatorEditor:
             from collections import deque
             data = np.array(st["img"].convert("RGBA"), dtype=np.uint8)
             h, w = data.shape[:2]
-            # auto-detect bg color: median of opaque corner pixels only
+            # if already has transparent separators (zero-alpha col or row) → skip BG removal
+            alpha = data[:, :, 3]
+            if (alpha.sum(axis=0) == 0).any() or (alpha.sum(axis=1) == 0).any():
+                status_v.set("Sprite sheet ma już przezroczyste tło — wykrywam klatki…")
+                do_detect(); return
+            # auto-detect bg color: median of corner pixels
             cs = max(1, min(5, h // 6, w // 6))
             corners = np.vstack([
-                data[:cs,    :cs,    :].reshape(-1, 4),
-                data[:cs,    w-cs:,  :].reshape(-1, 4),
-                data[h-cs:,  :cs,    :].reshape(-1, 4),
-                data[h-cs:,  w-cs:,  :].reshape(-1, 4),
+                data[:cs,    :cs,    :3].reshape(-1, 3),
+                data[:cs,    w-cs:,  :3].reshape(-1, 3),
+                data[h-cs:,  :cs,    :3].reshape(-1, 3),
+                data[h-cs:,  w-cs:,  :3].reshape(-1, 3),
             ])
-            opaque = corners[corners[:, 3] > 32]
-            if len(opaque) == 0:
-                status_v.set("Tło już przezroczyste — wykrywam klatki…")
-                do_detect(); return
-            bg = np.median(opaque[:, :3], axis=0)
+            bg = np.median(corners, axis=0)
             hx = "#{:02x}{:02x}{:02x}".format(int(bg[0]), int(bg[1]), int(bg[2]))
             # flood fill from all 4 edges — only spreads through pixels similar to bg
             tol_sq = (tol_v.get() * 2.55) ** 2
