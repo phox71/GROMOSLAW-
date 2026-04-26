@@ -618,16 +618,16 @@ class GamifikatorEditor:
                                   bg="#8b0000", fg="white", relief=tk.FLAT,
                                   font=("Segoe UI", 8), state=tk.DISABLED)
         btn_del_frame.pack(side=tk.RIGHT)
-        fr_outer = tk.Frame(rp, bg="#0d0d0d", height=170)
+        fr_outer = tk.Frame(rp, bg="#0d0d0d", height=320)
         fr_outer.pack(fill=tk.X, padx=4); fr_outer.pack_propagate(False)
         fr_cv = tk.Canvas(fr_outer, bg="#0d0d0d", highlightthickness=0)
-        fr_scr = tk.Scrollbar(fr_outer, orient="horizontal", command=fr_cv.xview)
-        fr_cv.configure(xscrollcommand=fr_scr.set)
-        fr_scr.pack(side=tk.BOTTOM, fill=tk.X); fr_cv.pack(fill=tk.BOTH, expand=True)
+        fr_scr = tk.Scrollbar(fr_outer, orient="vertical", command=fr_cv.yview)
+        fr_cv.configure(yscrollcommand=fr_scr.set)
+        fr_scr.pack(side=tk.RIGHT, fill=tk.Y); fr_cv.pack(fill=tk.BOTH, expand=True)
         fr_inner = tk.Frame(fr_cv, bg="#0d0d0d")
         fr_cv.create_window((0, 0), window=fr_inner, anchor="nw")
         fr_inner.bind("<Configure>", lambda e: fr_cv.configure(scrollregion=fr_cv.bbox("all")))
-        fr_cv.bind("<MouseWheel>", lambda e: fr_cv.xview_scroll(int(-1*(e.delta/120)), "units"))
+        fr_cv.bind("<MouseWheel>", lambda e: fr_cv.yview_scroll(int(-1*(e.delta/120)), "units"))
 
         rhlbl("BIBLIOTEKA ANIMATORATORA")
         lib_bar2 = tk.Frame(rp, bg="#0d0d0d"); lib_bar2.pack(fill=tk.X, padx=4, pady=(0, 2))
@@ -774,6 +774,8 @@ class GamifikatorEditor:
                 if st["job"]:
                     d.after_cancel(st["job"]); st["job"] = None
 
+        GRID_COLS = 7
+
         def refresh_frames_grid():
             for w in fr_inner.winfo_children():
                 w.destroy()
@@ -783,7 +785,7 @@ class GamifikatorEditor:
                 cell_bg = "#3a1a1a" if is_sel else "#1a1a1a"
                 cell = tk.Frame(fr_inner, bg=cell_bg, highlightbackground="#cc3333" if is_sel else "#1a1a1a",
                                 highlightthickness=2)
-                cell.pack(side=tk.LEFT, padx=3, pady=3)
+                cell.grid(row=i // GRID_COLS, column=i % GRID_COLS, padx=3, pady=3)
                 bg_t = checker_t.copy()
                 scale = min(72 / max(frame.width, 1), 72 / max(frame.height, 1))
                 nw = max(1, int(frame.width * scale))
@@ -1673,7 +1675,8 @@ class GamifikatorEditor:
         dx = self.player_target[0] - self.player_runtime_pos[0]
         dy = self.player_target[1] - self.player_runtime_pos[1]
         dist = math.sqrt(dx*dx + dy*dy)
-        if dist <= 3:
+        speed = max(1, self.project.player.get("walk_speed", 10))
+        if dist <= speed:
             self.player_runtime_pos[0] = self.player_target[0]
             self.player_runtime_pos[1] = self.player_target[1]
             self.current_anim = "idle"
@@ -1688,7 +1691,6 @@ class GamifikatorEditor:
         elif -157.5 <= angle < -112.5: self.current_anim, self.facing_left = "walk_ru", True
         elif -112.5 <= angle <  -67.5: self.current_anim, self.facing_left = "walk_u",  False
         else:                          self.current_anim, self.facing_left = "walk_ru", False
-        speed = self.project.player.get("walk_speed", 10)
         self.player_runtime_pos[0] += (dx / dist) * speed
         self.player_runtime_pos[1] += (dy / dist) * speed
 
