@@ -527,7 +527,7 @@ class GamifikatorEditor:
         st = {"img": None, "path": "", "frames": [], "uniform": [],
               "fw": 0, "fh": 0, "tick": 0, "playing": False, "job": None,
               "pv_scale": 1.0, "pv_ox": 0, "pv_oy": 0, "current_pil": None,
-              "selected_frame": None}
+              "selected_frames": set()}
         lib_sel  = {"aid": None}
         self._anim_refs = {}
 
@@ -786,7 +786,7 @@ class GamifikatorEditor:
                 w.destroy()
             checker_t = make_checker(80, 80, 8)
             for i, frame in enumerate(st["uniform"]):
-                is_sel = (st["selected_frame"] == i)
+                is_sel = (i in st["selected_frames"])
                 cell_bg = "#3a1a1a" if is_sel else "#1a1a1a"
                 cell = tk.Frame(fr_inner, bg=cell_bg, highlightbackground="#cc3333" if is_sel else "#1a1a1a",
                                 highlightthickness=2)
@@ -801,8 +801,11 @@ class GamifikatorEditor:
                 lbl_img = tk.Label(cell, image=ref, bg="#252526" if not is_sel else "#4a2222", cursor="hand2")
                 lbl_img.pack()
                 def _click(e, fi=i):
-                    st["selected_frame"] = fi if st["selected_frame"] != fi else None
-                    btn_del_frame.config(state=tk.NORMAL if st["selected_frame"] is not None else tk.DISABLED)
+                    if e.state & 0x0001:  # Shift — toggle
+                        st["selected_frames"].symmetric_difference_update({fi})
+                    else:
+                        st["selected_frames"] = set() if st["selected_frames"] == {fi} else {fi}
+                    btn_del_frame.config(state=tk.NORMAL if st["selected_frames"] else tk.DISABLED)
                     show_frame(fi)
                     refresh_frames_grid()
                 lbl_img.bind("<Button-1>", _click)
@@ -811,21 +814,25 @@ class GamifikatorEditor:
             fr_cv.update_idletasks(); fr_cv.configure(scrollregion=fr_cv.bbox("all"))
 
         def delete_frame():
-            idx = st["selected_frame"]
-            if idx is None or idx >= len(st["uniform"]):
+            indices = sorted(st["selected_frames"], reverse=True)
+            if not indices:
                 return
-            st["uniform"].pop(idx)
-            if st["frames"] and idx < len(st["frames"]):
-                st["frames"].pop(idx)
-            st["selected_frame"] = None
+            for idx in indices:
+                if 0 <= idx < len(st["uniform"]):
+                    st["uniform"].pop(idx)
+                    if st["frames"] and idx < len(st["frames"]):
+                        st["frames"].pop(idx)
+            st["selected_frames"] = set()
             btn_del_frame.config(state=tk.DISABLED)
             n = len(st["uniform"])
             if n == 0:
                 st["fw"] = 0; st["fh"] = 0
                 status_v.set("Wszystkie klatki usunięte.")
             else:
+                st["fw"] = max(f.width for f in st["uniform"])
+                st["fh"] = max(f.height for f in st["uniform"])
                 st["tick"] = min(st["tick"], n - 1)
-                status_v.set(f"Usunięto klatkę #{idx+1}. Pozostało: {n} klatek.")
+                status_v.set(f"Usunięto {len(indices)} klatek. Pozostało: {n}.")
                 show_frame(st["tick"])
             refresh_frames_grid()
 
@@ -835,7 +842,9 @@ class GamifikatorEditor:
                 return
             name = name_e.get().strip() or "animacja"
             safe = name.replace(" ", "_")
-            fw, fh, n, fps = st["fw"], st["fh"], len(st["uniform"]), fps_v.get()
+            n = len(st["uniform"]); fps = fps_v.get()
+            fw = max(f.width for f in st["uniform"])
+            fh = max(f.height for f in st["uniform"])
             sheet = Image.new("RGBA", (fw * n, fh), (0, 0, 0, 0))
             for i, f in enumerate(st["uniform"]):
                 sheet.paste(f, (i * fw, 0), f)
@@ -2115,7 +2124,13 @@ class GamifikatorEditor:
             def _lib_pick(pv=p_v, fv=f_v):
                 def cb(aid):
                     a = self.project.animations[aid]
-                    pv.set(a["sheet_path"]); fv.set(str(a["frames"]))
+                    pv.set(a["sheet_path"])
+                    try:
+                        img_w = Image.open(a["sheet_path"]).width
+                        true_n = max(1, img_w // max(1, a.get("frame_w", img_w)))
+                    except Exception:
+                        true_n = a["frames"]
+                    fv.set(str(true_n))
                 self._pick_from_anim_lib(d, cb)
             tk.Button(f, text="📚", command=_lib_pick,
                       bg="#7B2FBE", fg="white", relief=tk.FLAT, padx=4).pack(side=tk.LEFT, padx=2)
