@@ -526,7 +526,8 @@ class GamifikatorEditor:
 
         st = {"img": None, "path": "", "frames": [], "uniform": [],
               "fw": 0, "fh": 0, "tick": 0, "playing": False, "job": None,
-              "pv_scale": 1.0, "pv_ox": 0, "pv_oy": 0, "current_pil": None}
+              "pv_scale": 1.0, "pv_ox": 0, "pv_oy": 0, "current_pil": None,
+              "selected_frame": None}
         lib_sel  = {"aid": None}
         self._anim_refs = {}
 
@@ -609,7 +610,14 @@ class GamifikatorEditor:
                  bg="#0d0d0d", fg="white", showvalue=False,
                  command=lambda v: tol_val_lbl.config(text=v)).pack(fill=tk.X, padx=4, pady=(0, 6))
 
-        rhlbl("WYKRYTE KLATKI  (identyczne kontenery, wyrównane do dołu — bez drgań)")
+        fr_bar = tk.Frame(rp, bg="#0d0d0d"); fr_bar.pack(fill=tk.X, padx=4, pady=(6, 2))
+        rhlbl2 = tk.Label(fr_bar, text="WYKRYTE KLATKI", bg="#0d0d0d", fg="#9B59B6",
+                          font=("Segoe UI", 8, "bold")); rhlbl2.pack(side=tk.LEFT)
+        btn_del_frame = tk.Button(fr_bar, text="🗑  USUŃ KLATKĘ",
+                                  command=lambda: delete_frame(),
+                                  bg="#8b0000", fg="white", relief=tk.FLAT,
+                                  font=("Segoe UI", 8), state=tk.DISABLED)
+        btn_del_frame.pack(side=tk.RIGHT)
         fr_outer = tk.Frame(rp, bg="#0d0d0d", height=170)
         fr_outer.pack(fill=tk.X, padx=4); fr_outer.pack_propagate(False)
         fr_cv = tk.Canvas(fr_outer, bg="#0d0d0d", highlightthickness=0)
@@ -771,7 +779,11 @@ class GamifikatorEditor:
                 w.destroy()
             checker_t = make_checker(80, 80, 8)
             for i, frame in enumerate(st["uniform"]):
-                cell = tk.Frame(fr_inner, bg="#1a1a1a"); cell.pack(side=tk.LEFT, padx=3, pady=3)
+                is_sel = (st["selected_frame"] == i)
+                cell_bg = "#3a1a1a" if is_sel else "#1a1a1a"
+                cell = tk.Frame(fr_inner, bg=cell_bg, highlightbackground="#cc3333" if is_sel else "#1a1a1a",
+                                highlightthickness=2)
+                cell.pack(side=tk.LEFT, padx=3, pady=3)
                 bg_t = checker_t.copy()
                 scale = min(72 / max(frame.width, 1), 72 / max(frame.height, 1))
                 nw = max(1, int(frame.width * scale))
@@ -779,11 +791,36 @@ class GamifikatorEditor:
                 thumb = frame.resize((nw, nh), Image.Resampling.LANCZOS)
                 bg_t.paste(thumb, ((80 - nw) // 2, 80 - nh), thumb)
                 ref = ImageTk.PhotoImage(bg_t); self._anim_refs[f"t{i}"] = ref
-                lbl_img = tk.Label(cell, image=ref, bg="#252526", cursor="hand2")
-                lbl_img.pack(); lbl_img.bind("<Button-1>", lambda e, fi=i: show_frame(fi))
-                tk.Label(cell, text=f"#{i+1}", bg="#1a1a1a", fg="#555",
+                lbl_img = tk.Label(cell, image=ref, bg="#252526" if not is_sel else "#4a2222", cursor="hand2")
+                lbl_img.pack()
+                def _click(e, fi=i):
+                    st["selected_frame"] = fi if st["selected_frame"] != fi else None
+                    btn_del_frame.config(state=tk.NORMAL if st["selected_frame"] is not None else tk.DISABLED)
+                    show_frame(fi)
+                    refresh_frames_grid()
+                lbl_img.bind("<Button-1>", _click)
+                tk.Label(cell, text=f"#{i+1}", bg=cell_bg, fg="#cc6666" if is_sel else "#555",
                          font=("Segoe UI", 7)).pack()
             fr_cv.update_idletasks(); fr_cv.configure(scrollregion=fr_cv.bbox("all"))
+
+        def delete_frame():
+            idx = st["selected_frame"]
+            if idx is None or idx >= len(st["uniform"]):
+                return
+            st["uniform"].pop(idx)
+            if st["frames"] and idx < len(st["frames"]):
+                st["frames"].pop(idx)
+            st["selected_frame"] = None
+            btn_del_frame.config(state=tk.DISABLED)
+            n = len(st["uniform"])
+            if n == 0:
+                st["fw"] = 0; st["fh"] = 0
+                status_v.set("Wszystkie klatki usunięte.")
+            else:
+                st["tick"] = min(st["tick"], n - 1)
+                status_v.set(f"Usunięto klatkę #{idx+1}. Pozostało: {n} klatek.")
+                show_frame(st["tick"])
+            refresh_frames_grid()
 
         def save_anim():
             if not st["uniform"]:
