@@ -750,6 +750,11 @@ class GamifikatorEditor:
             bg.paste(resized, (ox, max(0, oy)), resized)
             ref = ImageTk.PhotoImage(bg); self._anim_refs["pv"] = ref
             pv_cv.itemconfig(pv_img_id, image=ref)
+            st["tick"] = idx
+            pv_cv.delete("frame_lbl")
+            pv_cv.create_text(356, 296, text=f"{idx + 1} / {len(uniform)}",
+                              fill="white", font=("Segoe UI", 8, "bold"),
+                              anchor="se", tags="frame_lbl")
 
         def animate():
             if not st["playing"] or not d.winfo_exists():
@@ -2174,7 +2179,10 @@ class GamifikatorEditor:
         anim_key = self.current_anim if self.is_playing else "idle"
         anim_data = anims.get(anim_key, {})
         if not anim_data.get("path"):
-            anim_data = anims.get("idle", {"path": "", "frames": 1})
+            if anim_key == "walk_ru":
+                anim_data = anims.get("walk_r", {})
+            if not anim_data.get("path"):
+                anim_data = anims.get("idle", {"path": "", "frames": 1})
         path = anim_data["path"]
         frames = max(1, anim_data.get("frames", 1))
         if path and os.path.exists(path):
