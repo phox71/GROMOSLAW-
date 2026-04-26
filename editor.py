@@ -39,7 +39,7 @@ class ToolTip:
 class GamifikatorEditor:
     def __init__(self, root):
         self.root = root
-        self.root.title("GAMIFIKATOR 2026 - v2.4.7")
+        self.root.title("GAMIFIKATOR 2026 - v2.6.1")
         self.root.geometry("1650x950")
         self.root.configure(bg="#121212")
 
@@ -83,7 +83,7 @@ class GamifikatorEditor:
         self.setup_canvas_events()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.engine_loop()
-        self.log("System Gamifikator v2.4.7 zaladowany.")
+        self.log("System Gamifikator v2.6.1 zaladowany.")
 
     def log(self, message):
         ts = time.strftime("%H:%M:%S")
@@ -145,21 +145,35 @@ class GamifikatorEditor:
         self.toolbar = tk.Frame(self.root, bg="#1e1e1e", height=50)
         self.toolbar.pack(side=tk.TOP, fill=tk.X)
         btn_s = {"bg": "#1e1e1e", "fg": "#eee", "relief": tk.FLAT, "font": ("Segoe UI", 9)}
-        tk.Button(self.toolbar, text="PROJECT",     command=self.new_project_dialog, **btn_s).pack(side=tk.LEFT, padx=10)
-        tk.Button(self.toolbar, text="OPEN",        command=self.open_project,       **btn_s).pack(side=tk.LEFT, padx=10)
-        tk.Button(self.toolbar, text="SAVE",        command=self.save_project,       **btn_s).pack(side=tk.LEFT, padx=10)
-        tk.Button(self.toolbar, text="ANIMATORATOR", command=self.open_animatorator,
-                  bg="#7B2FBE", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=10)
-        tk.Button(self.toolbar, text="SCRIPTS", command=self.open_scripts,
-                  bg="#2ea043", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=10)
-        tk.Button(self.toolbar, text="DIALOGI", command=self.open_dialogs,
-                  bg="#e67e22", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=10)
+        _b = tk.Button(self.toolbar, text="PROJECT", command=self.new_project_dialog, **btn_s)
+        _b.pack(side=tk.LEFT, padx=10)
+        ToolTip(_b, "Nowy projekt — tworzy pusty projekt i zamyka bieżący.")
+        _b = tk.Button(self.toolbar, text="OPEN", command=self.open_project, **btn_s)
+        _b.pack(side=tk.LEFT, padx=10)
+        ToolTip(_b, "Otwórz projekt z pliku .phx.")
+        _b = tk.Button(self.toolbar, text="SAVE", command=self.save_project, **btn_s)
+        _b.pack(side=tk.LEFT, padx=10)
+        ToolTip(_b, "Zapisz projekt do pliku .phx.")
+        _b = tk.Button(self.toolbar, text="ANIMATORATOR", command=self.open_animatorator,
+                  bg="#7B2FBE", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"))
+        _b.pack(side=tk.LEFT, padx=10)
+        ToolTip(_b, "ANIMATORATOR — załaduj sprite sheet, usuń tło, wykryj klatki animacji i zapisz do biblioteki.")
+        _b = tk.Button(self.toolbar, text="SCRIPTS", command=self.open_scripts,
+                  bg="#2ea043", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"))
+        _b.pack(side=tk.LEFT, padx=10)
+        ToolTip(_b, "SCRIPTS — pisz i zarządzaj skryptami Python (efekty, logika pokoju, zdarzenia).")
+        _b = tk.Button(self.toolbar, text="DIALOGI", command=self.open_dialogs,
+                  bg="#e67e22", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"))
+        _b.pack(side=tk.LEFT, padx=10)
+        ToolTip(_b, "DIALOGI — twórz drzewa dialogowe NPC z wyborem odpowiedzi gracza.")
         self.btn_logs = tk.Button(self.toolbar, text="LOGS", command=self.toggle_logs, **btn_s)
         self.btn_logs.pack(side=tk.LEFT, padx=10)
+        ToolTip(self.btn_logs, "Pokaż/ukryj konsolę zdarzeń i logów silnika.")
         self.btn_play = tk.Button(self.toolbar, text="► PLAY MODE", command=self.toggle_play,
                                   bg="#007acc", fg="white", relief=tk.FLAT,
                                   font=("Segoe UI", 9, "bold"), padx=25)
         self.btn_play.pack(side=tk.RIGHT, padx=10, pady=8)
+        ToolTip(self.btn_play, "Uruchom tryb gry — klikaj po scenie by chodzić i wchodzić w interakcje.")
 
         self.main_pane = tk.PanedWindow(self.root, orient=tk.VERTICAL, bg="#121212", sashwidth=6)
         self.main_pane.pack(fill=tk.BOTH, expand=True)
@@ -238,6 +252,12 @@ class GamifikatorEditor:
 
     def _wa_pts(self, raw):
         return raw['points'] if isinstance(raw, dict) else raw.points
+
+    def _help_btn(self, parent, text):
+        lbl = tk.Label(parent, text=" ?", bg=parent.cget("bg"), fg="#4a6080",
+                       font=("Segoe UI", 7, "bold"), cursor="question_arrow")
+        ToolTip(lbl, text)
+        return lbl
 
     _EDGE = 9  # px in game coords
 
@@ -560,6 +580,7 @@ class GamifikatorEditor:
 
         fps_f = tk.Frame(lp, bg="#161616"); fps_f.pack(fill=tk.X, padx=8, pady=(0, 2))
         tk.Label(fps_f, text="FPS:", bg="#161616", fg="#aaa", font=("Segoe UI", 8)).pack(side=tk.LEFT)
+        self._help_btn(fps_f, "Liczba klatek na sekundę w podglądzie i zapisanej animacji.").pack(side=tk.LEFT, padx=2)
         fps_lbl = tk.Label(fps_f, text="8", bg="#161616", fg="white",
                            font=("Segoe UI", 8, "bold"), width=3)
         fps_lbl.pack(side=tk.RIGHT)
@@ -575,11 +596,13 @@ class GamifikatorEditor:
         hlbl(lp, "ZAPISZ DO BIBLIOTEKI ANIMATORATORA")
         sf = tk.Frame(lp, bg="#161616"); sf.pack(fill=tk.X, padx=8, pady=2)
         tk.Label(sf, text="Nazwa:", bg="#161616", fg="#aaa", font=("Segoe UI", 8)).pack(side=tk.LEFT)
+        self._help_btn(sf, "Nazwa animacji w bibliotece projektu. Używana przy przypisywaniu do gracza/hotpointa.").pack(side=tk.LEFT, padx=2)
         name_e = tk.Entry(sf, bg="#0d0d0d", fg="white", insertbackground="white", relief=tk.FLAT)
         name_e.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-        tk.Button(lp, text="💾  ZAPISZ ANIMACJĘ", command=lambda: save_anim(),
+        _sb = tk.Button(lp, text="💾  ZAPISZ ANIMACJĘ", command=lambda: save_anim(),
                   bg="#7B2FBE", fg="white", relief=tk.FLAT,
-                  font=("Segoe UI", 9, "bold")).pack(fill=tk.X, padx=8, pady=6)
+                  font=("Segoe UI", 9, "bold")); _sb.pack(fill=tk.X, padx=8, pady=6)
+        ToolTip(_sb, "Generuje sprite sheet (klatki poziomo) i zapisuje animację do biblioteki projektu.\nNastępnie przypisz ją do gracza w CONFIGURE PLAYER.")
 
         tk.Frame(mid_f, bg="#2a2a2a", width=2).pack(side=tk.LEFT, fill=tk.Y)
 
@@ -595,9 +618,11 @@ class GamifikatorEditor:
         tk.Button(src_bar, text="📂  ZAŁADUJ SPRITE SHEET", command=lambda: load_sheet(),
                   bg="#C4A35A", fg="black", relief=tk.FLAT,
                   font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=2)
-        tk.Button(src_bar, text="⚡  DOSTOSUJ AUTOMATYCZNIE", command=lambda: do_remove_bg_anim(),
+        _ab = tk.Button(src_bar, text="⚡  DOSTOSUJ AUTOMATYCZNIE", command=lambda: do_remove_bg_anim(),
                   bg="#1a5c1a", fg="white", relief=tk.FLAT,
-                  font=("Segoe UI", 9, "bold")).pack(side=tk.LEFT, padx=6)
+                  font=("Segoe UI", 9, "bold")); _ab.pack(side=tk.LEFT, padx=6)
+        ToolTip(_ab, "Usuwa tło sprite sheetu flood-fillem od krawędzi, a następnie automatycznie wykrywa klatki animacji.")
+        self._help_btn(src_bar, "Załaduj PNG ze sprite sheetem. Klatki mogą być w 1 lub 2 rzędach.").pack(side=tk.RIGHT, padx=4)
 
         tol_row = tk.Frame(rp, bg="#0d0d0d"); tol_row.pack(fill=tk.X, padx=4, pady=(4, 1))
         tk.Label(tol_row, text="Tolerancja usuwania tła:", bg="#0d0d0d", fg="#aaa",
@@ -605,6 +630,7 @@ class GamifikatorEditor:
         tol_val_lbl = tk.Label(tol_row, text="25", bg="#0d0d0d", fg="white",
                                font=("Segoe UI", 8, "bold"), width=3)
         tol_val_lbl.pack(side=tk.RIGHT)
+        self._help_btn(tol_row, "Im wyższa wartość, tym więcej pikseli tła zostanie usuniętych.\n0 = nie usuwaj nic, 100 = usuń wszystko podobne kolorem do narożników.").pack(side=tk.RIGHT)
         tol_v = tk.IntVar(value=25)
         tk.Scale(rp, variable=tol_v, from_=0, to=100, orient=tk.HORIZONTAL,
                  bg="#0d0d0d", fg="white", showvalue=False,
@@ -613,11 +639,13 @@ class GamifikatorEditor:
         fr_bar = tk.Frame(rp, bg="#0d0d0d"); fr_bar.pack(fill=tk.X, padx=4, pady=(6, 2))
         rhlbl2 = tk.Label(fr_bar, text="WYKRYTE KLATKI", bg="#0d0d0d", fg="#9B59B6",
                           font=("Segoe UI", 8, "bold")); rhlbl2.pack(side=tk.LEFT)
+        self._help_btn(fr_bar, "Kliknij klatkę by ją zaznaczyć (Shift+klik — multi-select).\nKliknij zaznaczoną ponownie by odznaczyć.").pack(side=tk.LEFT, padx=4)
         btn_del_frame = tk.Button(fr_bar, text="🗑  USUŃ KLATKĘ",
                                   command=lambda: delete_frame(),
                                   bg="#8b0000", fg="white", relief=tk.FLAT,
                                   font=("Segoe UI", 8), state=tk.DISABLED)
         btn_del_frame.pack(side=tk.RIGHT)
+        ToolTip(btn_del_frame, "Usuwa zaznaczone klatki z animacji. Operacja nieodwracalna w bieżącej sesji.")
         fr_outer = tk.Frame(rp, bg="#0d0d0d", height=320)
         fr_outer.pack(fill=tk.X, padx=4); fr_outer.pack_propagate(False)
         fr_cv = tk.Canvas(fr_outer, bg="#0d0d0d", highlightthickness=0)
@@ -2026,6 +2054,8 @@ class GamifikatorEditor:
         sc_v.set(hp.scale_png); sc_v.pack(fill=tk.X, padx=20)
 
         lbl("FLOW")
+        flow_hdr = tk.Frame(d, bg="#1e1e1e"); flow_hdr.pack(fill=tk.X, padx=20)
+        self._help_btn(flow_hdr, "Player Comment — komentarz nad graczem.\nHotpoint Comment — dymek nad hotpointem.\nUnlock LOCK — odblokowuje inny zablokowany hotpoint.\nSwap PNG — zamienia grafikę hotpointa na SWAP.\nChange Room — przenosi gracza do innego pokoju.").pack(anchor="w")
         f_chk = tk.Frame(d, bg="#252526"); f_chk.pack(fill=tk.X, padx=20, pady=5)
         chk_vars = {k: tk.BooleanVar(value=v) for k, v in hp.flow.items()}
         for k, t in [("p_com", "Player Comment"), ("h_com", "Hotpoint Comment"),
@@ -2034,6 +2064,8 @@ class GamifikatorEditor:
                            bg="#252526", fg="#eee", selectcolor="#121212").pack(anchor="w", padx=5)
 
         lbl("ITEM")
+        item_hdr = tk.Frame(d, bg="#1e1e1e"); item_hdr.pack(fill=tk.X, padx=20)
+        self._help_btn(item_hdr, "Jest przedmiotem — gracz klika i podnosi, hotpoint znika.\nWymagany przedmiot (ID) — gracz musi mieć ten przedmiot w ekwipunku by wejść w interakcję.").pack(anchor="w")
         item_f = tk.Frame(d, bg="#252526"); item_f.pack(fill=tk.X, padx=20, pady=5)
         is_item_v = tk.BooleanVar(value=getattr(hp, 'is_item', False))
         tk.Checkbutton(item_f, text="Jest przedmiotem (gracz może podnieść)",
@@ -2112,16 +2144,28 @@ class GamifikatorEditor:
         preview_cv.pack(pady=10)
         self.preview_image_ref = None
 
+        _anim_tips = {
+            "idle":    "Spoczynek — gdy gracz stoi w miejscu.",
+            "walk_r":  "Chód w prawo (odbicie lustrzane → lewo).",
+            "walk_u":  "Chód w górę.",
+            "walk_d":  "Chód w dół.",
+            "walk_rd": "Chód prawo-dół (odbicie → lewo-dół).",
+            "walk_ru": "Chód prawo-góra (odbicie → lewo-góra). Fallback: walk_r.",
+            "talk":    "Rozmowa z NPC na równym poziomie — odpalana podczas aktywnego dialogu.",
+            "talk_up": "Rozmowa w górę — NPC jest wyżej niż gracz. Fallback: talk → idle.",
+        }
         def row(k):
             f = tk.Frame(d, bg="#1e1e1e"); f.pack(fill=tk.X, padx=20, pady=2)
             tk.Label(f, text=k.upper(), bg="#1e1e1e", fg="#aaa", width=10).pack(side=tk.LEFT)
-            entry = self.project.player["animations"].get(k, {"path": "", "frames": 1})
+            self._help_btn(f, _anim_tips.get(k, "")).pack(side=tk.LEFT)
+            entry = self.project.player["animations"].get(k, {"path": "", "frames": 1, "fps": 8})
             p_v = tk.StringVar(value=entry["path"])
             f_v = tk.StringVar(value=str(entry["frames"]))
+            fps_v2 = tk.StringVar(value=str(entry.get("fps", 8)))
             tk.Entry(f, textvariable=p_v, bg="#121212", fg="white", bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
             tk.Button(f, text="...",
                       command=lambda: p_v.set(filedialog.askopenfilename() or p_v.get())).pack(side=tk.LEFT)
-            def _lib_pick(pv=p_v, fv=f_v):
+            def _lib_pick(pv=p_v, fv=f_v, fpv=fps_v2):
                 def cb(aid):
                     a = self.project.animations[aid]
                     pv.set(a["sheet_path"])
@@ -2131,34 +2175,42 @@ class GamifikatorEditor:
                     except Exception:
                         true_n = a["frames"]
                     fv.set(str(true_n))
+                    fpv.set(str(a.get("fps", 8)))
                 self._pick_from_anim_lib(d, cb)
             tk.Button(f, text="📚", command=_lib_pick,
                       bg="#7B2FBE", fg="white", relief=tk.FLAT, padx=4).pack(side=tk.LEFT, padx=2)
-            tk.Entry(f, textvariable=f_v, width=3, bg="#121212", fg="#00ff00", bd=0).pack(side=tk.LEFT, padx=5)
-            return {"path": p_v, "frames": f_v}
+            tk.Entry(f, textvariable=f_v, width=3, bg="#121212", fg="#00ff00", bd=0).pack(side=tk.LEFT, padx=2)
+            tk.Label(f, text="fr", bg="#1e1e1e", fg="#555", font=("Segoe UI", 7)).pack(side=tk.LEFT)
+            tk.Entry(f, textvariable=fps_v2, width=3, bg="#121212", fg="#ffaa00", bd=0).pack(side=tk.LEFT, padx=2)
+            tk.Label(f, text="fps", bg="#1e1e1e", fg="#555", font=("Segoe UI", 7)).pack(side=tk.LEFT)
+            return {"path": p_v, "frames": f_v, "fps": fps_v2}
 
-        rvs = {k: row(k) for k in ["idle", "walk_r", "walk_u", "walk_d", "walk_rd", "walk_ru"]}
-        sp = tk.Scale(d, from_=1, to=100, orient=tk.HORIZONTAL, label="WALK SPEED",
+        rvs = {k: row(k) for k in ["idle", "walk_r", "walk_u", "walk_d", "walk_rd", "walk_ru", "talk", "talk_up"]}
+        sp_row = tk.Frame(d, bg="#1e1e1e"); sp_row.pack(fill=tk.X, padx=20)
+        sp = tk.Scale(sp_row, from_=1, to=100, orient=tk.HORIZONTAL, label="WALK SPEED",
                       bg="#1e1e1e", fg="white")
-        sp.set(self.project.player.get("walk_speed", 10)); sp.pack(fill=tk.X, padx=20)
+        sp.set(self.project.player.get("walk_speed", 10)); sp.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._help_btn(sp_row, "Prędkość chodzenia gracza po scenie (px/klatkę silnika).").pack(side=tk.LEFT, anchor="s", pady=4)
 
         def live_p_sc(v): self.project.player["scale"] = int(v); self.refresh_canvas()
-        sc = tk.Scale(d, from_=10, to=500, orient=tk.HORIZONTAL, label="PLAYER SCALE %",
+        sc_row = tk.Frame(d, bg="#1e1e1e"); sc_row.pack(fill=tk.X, padx=20)
+        sc = tk.Scale(sc_row, from_=10, to=500, orient=tk.HORIZONTAL, label="PLAYER SCALE %",
                       bg="#1e1e1e", fg="white", command=live_p_sc)
-        sc.set(self.project.player.get("scale", 100)); sc.pack(fill=tk.X, padx=20)
+        sc.set(self.project.player.get("scale", 100)); sc.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._help_btn(sc_row, "Rozmiar sprite'a gracza względem oryginału (100% = bez skalowania).").pack(side=tk.LEFT, anchor="s", pady=4)
 
         def update_preview():
             if not d.winfo_exists():
                 return
-            self.preview_anim_tick += 1
             idle_data = rvs["idle"]
             path = idle_data["path"].get()
             frames = max(1, int(idle_data["frames"].get() or 1))
+            fps_val = max(1, int(idle_data["fps"].get() or 8))
             if path and os.path.exists(path):
                 img = Image.open(path).convert("RGBA")
                 fw = max(1, img.width // frames)
                 fh = img.height
-                tick = self.preview_anim_tick % frames
+                tick = int(time.time() * fps_val) % frames
                 frame_img = img.crop((tick * fw, 0, (tick + 1) * fw, fh))
                 ratio = min(180/fw, 180/fh)
                 frame_img = frame_img.resize((max(1, int(fw*ratio)), max(1, int(fh*ratio))),
@@ -2173,6 +2225,7 @@ class GamifikatorEditor:
                 self.project.player["animations"][k] = {
                     "path": v["path"].get(),
                     "frames": max(1, int(v["frames"].get() or 1)),
+                    "fps": max(1, int(v["fps"].get() or 8)),
                 }
             self.project.player["walk_speed"] = sp.get()
             self.project.player["scale"] = sc.get()
@@ -2192,19 +2245,34 @@ class GamifikatorEditor:
         draw_scale = scale_val * self.view_scale
         anims = self.project.player["animations"]
         anim_key = self.current_anim if self.is_playing else "idle"
+        # Switch to talk animation when dialog is active and player is idle
+        if self.is_playing and self.active_dialog and anim_key == "idle":
+            try:
+                hp_id = self.project.dialogs[self.active_dialog["did"]].get("hotpoint_id", "")
+                if hp_id:
+                    _, gc_y = self.get_hp_center(hp_id)
+                    anim_key = "talk_up" if gc_y < py - 40 else "talk"
+                else:
+                    anim_key = "talk"
+            except Exception:
+                anim_key = "talk"
         anim_data = anims.get(anim_key, {})
+        # Fallback chain: talk_up→talk, walk_ru→walk_r, anything→idle
         if not anim_data.get("path"):
-            if anim_key == "walk_ru":
-                anim_data = anims.get("walk_r", {})
+            for fb in {"walk_ru": ["walk_r"], "talk_up": ["talk", "idle"], "talk": ["idle"]}.get(anim_key, ["idle"]):
+                anim_data = anims.get(fb, {})
+                if anim_data.get("path"):
+                    break
             if not anim_data.get("path"):
                 anim_data = anims.get("idle", {"path": "", "frames": 1})
         path = anim_data["path"]
         frames = max(1, anim_data.get("frames", 1))
+        fps = max(1, anim_data.get("fps", 8))
         if path and os.path.exists(path):
             try:
                 img = Image.open(path).convert("RGBA")
                 fw, fh = max(1, img.width // frames), max(1, img.height)
-                tick = self.anim_tick % frames
+                tick = int(time.time() * fps) % frames
                 p_img = img.crop((tick * fw, 0, (tick + 1) * fw, fh))
                 if self.facing_left:
                     p_img = p_img.transpose(Image.FLIP_LEFT_RIGHT)

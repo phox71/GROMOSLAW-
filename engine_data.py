@@ -42,12 +42,14 @@ class GamifikatorProject:
             "scale": 100,
             "walk_speed": 10,
             "animations": {
-                "idle":    {"path": "", "frames": 1},
-                "walk_r":  {"path": "", "frames": 1},
-                "walk_u":  {"path": "", "frames": 1},
-                "walk_d":  {"path": "", "frames": 1},
-                "walk_rd": {"path": "", "frames": 1},
-                "walk_ru": {"path": "", "frames": 1},
+                "idle":    {"path": "", "frames": 1, "fps": 8},
+                "walk_r":  {"path": "", "frames": 1, "fps": 8},
+                "walk_u":  {"path": "", "frames": 1, "fps": 8},
+                "walk_d":  {"path": "", "frames": 1, "fps": 8},
+                "walk_rd": {"path": "", "frames": 1, "fps": 8},
+                "walk_ru": {"path": "", "frames": 1, "fps": 8},
+                "talk":    {"path": "", "frames": 1, "fps": 8},
+                "talk_up": {"path": "", "frames": 1, "fps": 8},
             }
         }
     def to_json(self):
@@ -64,6 +66,8 @@ class GamifikatorProject:
         p.dialogs = d.get("dialogs", {})
         p.wrong_item_msgs = d.get("wrong_item_msgs", p.wrong_item_msgs)
         p.player = d.get("player", p.player)
-        for k in ["walk_rd", "walk_ru"]:
-            p.player["animations"].setdefault(k, {"path": "", "frames": 1})
+        for k in ["walk_rd", "walk_ru", "talk", "talk_up"]:
+            p.player["animations"].setdefault(k, {"path": "", "frames": 1, "fps": 8})
+        for v in p.player["animations"].values():
+            v.setdefault("fps", 8)
         return p
