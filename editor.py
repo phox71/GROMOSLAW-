@@ -67,6 +67,7 @@ class GamifikatorEditor:
         self.anim_tick = 0
         self.preview_anim_tick = 0
         self.facing_left = False
+        self.current_anim = "idle"
         self._lib_thumb_refs = {}
         self._lib_preview_ref = None
         self._anim_refs = {}
@@ -1636,11 +1637,20 @@ class GamifikatorEditor:
         dy = self.player_target[1] - self.player_runtime_pos[1]
         dist = math.sqrt(dx*dx + dy*dy)
         if dist <= 3:
+            self.player_runtime_pos[0] = self.player_target[0]
+            self.player_runtime_pos[1] = self.player_target[1]
+            self.current_anim = "idle"
             return
-        if dx < -1:
-            self.facing_left = True
-        elif dx > 1:
-            self.facing_left = False
+        angle = math.degrees(math.atan2(dy, dx))
+        if   -22.5 <= angle <   22.5: self.current_anim, self.facing_left = "walk_r",  False
+        elif  22.5 <= angle <   67.5: self.current_anim, self.facing_left = "walk_rd", False
+        elif  67.5 <= angle <  112.5: self.current_anim, self.facing_left = "walk_d",  False
+        elif 112.5 <= angle <  157.5: self.current_anim, self.facing_left = "walk_rd", True
+        elif angle >= 157.5 or angle < -157.5:
+                                      self.current_anim, self.facing_left = "walk_r",  True
+        elif -157.5 <= angle < -112.5: self.current_anim, self.facing_left = "walk_ru", True
+        elif -112.5 <= angle <  -67.5: self.current_anim, self.facing_left = "walk_u",  False
+        else:                          self.current_anim, self.facing_left = "walk_ru", False
         speed = self.project.player.get("walk_speed", 10)
         self.player_runtime_pos[0] += (dx / dist) * speed
         self.player_runtime_pos[1] += (dy / dist) * speed
@@ -1657,6 +1667,8 @@ class GamifikatorEditor:
             r = self.project.rooms[self.current_room_id]
             self.player_runtime_pos = list(r.get("player_pos", [960, 540]))
             self.player_target = list(self.player_runtime_pos)
+            self.current_anim = "idle"
+            self.facing_left = False
             self.swapped_hotpoints.clear()
             self.active_dialogs.clear()
             self.player_inventory.clear()
@@ -2050,8 +2062,9 @@ class GamifikatorEditor:
         def row(k):
             f = tk.Frame(d, bg="#1e1e1e"); f.pack(fill=tk.X, padx=20, pady=2)
             tk.Label(f, text=k.upper(), bg="#1e1e1e", fg="#aaa", width=10).pack(side=tk.LEFT)
-            p_v = tk.StringVar(value=self.project.player["animations"][k]["path"])
-            f_v = tk.StringVar(value=str(self.project.player["animations"][k]["frames"]))
+            entry = self.project.player["animations"].get(k, {"path": "", "frames": 1})
+            p_v = tk.StringVar(value=entry["path"])
+            f_v = tk.StringVar(value=str(entry["frames"]))
             tk.Entry(f, textvariable=p_v, bg="#121212", fg="white", bd=0).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
             tk.Button(f, text="...",
                       command=lambda: p_v.set(filedialog.askopenfilename() or p_v.get())).pack(side=tk.LEFT)
@@ -2065,7 +2078,7 @@ class GamifikatorEditor:
             tk.Entry(f, textvariable=f_v, width=3, bg="#121212", fg="#00ff00", bd=0).pack(side=tk.LEFT, padx=5)
             return {"path": p_v, "frames": f_v}
 
-        rvs = {k: row(k) for k in ["idle", "walk_r", "walk_u", "walk_d"]}
+        rvs = {k: row(k) for k in ["idle", "walk_r", "walk_u", "walk_d", "walk_rd", "walk_ru"]}
         sp = tk.Scale(d, from_=1, to=100, orient=tk.HORIZONTAL, label="WALK SPEED",
                       bg="#1e1e1e", fg="white")
         sp.set(self.project.player.get("walk_speed", 10)); sp.pack(fill=tk.X, padx=20)
@@ -2118,7 +2131,11 @@ class GamifikatorEditor:
     def draw_player(self, px, py, is_sel):
         scale_val = self.project.player.get("scale", 100) / 100.0
         draw_scale = scale_val * self.view_scale
-        anim_data = self.project.player["animations"].get("idle", {"path": "", "frames": 1})
+        anims = self.project.player["animations"]
+        anim_key = self.current_anim if self.is_playing else "idle"
+        anim_data = anims.get(anim_key, {})
+        if not anim_data.get("path"):
+            anim_data = anims.get("idle", {"path": "", "frames": 1})
         path = anim_data["path"]
         frames = max(1, anim_data.get("frames", 1))
         if path and os.path.exists(path):
