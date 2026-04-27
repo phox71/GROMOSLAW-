@@ -39,7 +39,11 @@ class ToolTip:
 class GamifikatorEditor:
     def __init__(self, root):
         self.root = root
-        self.root.title("GAMIFIKATOR 2026 - v2.6.1")
+        self.root.title("GROMOSŁAW 2001 ULTIMATE")
+        try:
+            self.root.iconbitmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gromoslaw.ico"))
+        except Exception:
+            pass
         self.root.geometry("1650x950")
         self.root.configure(bg="#121212")
 
@@ -83,7 +87,7 @@ class GamifikatorEditor:
         self.setup_canvas_events()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.engine_loop()
-        self.log("System Gamifikator v2.6.1 zaladowany.")
+        self.log("GROMOSŁAW 2001 ULTIMATE zaladowany.")
 
     def log(self, message):
         ts = time.strftime("%H:%M:%S")
