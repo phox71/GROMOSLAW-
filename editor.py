@@ -593,9 +593,50 @@ class GamifikatorEditor:
                  bg="#161616", fg="white", showvalue=False, length=280,
                  command=lambda v: fps_lbl.config(text=v)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
 
-        btn_play = tk.Button(lp, text="▶  PLAY PREVIEW", command=lambda: toggle_play(),
+        playback_row = tk.Frame(lp, bg="#161616"); playback_row.pack(fill=tk.X, padx=8, pady=4)
+        btn_play = tk.Button(playback_row, text="▶  PLAY", command=lambda: toggle_play(),
                              bg="#007acc", fg="white", relief=tk.FLAT, font=("Segoe UI", 9, "bold"))
-        btn_play.pack(fill=tk.X, padx=8, pady=4)
+        btn_play.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(playback_row, text="◄◄", command=lambda: prev_frame(),
+                  bg="#333", fg="white", relief=tk.FLAT, width=3, font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=1)
+        tk.Button(playback_row, text="►►", command=lambda: next_frame(),
+                  bg="#333", fg="white", relief=tk.FLAT, width=3, font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=1)
+
+        drift_row = tk.Frame(lp, bg="#161616"); drift_row.pack(fill=tk.X, padx=8, pady=(4, 2))
+        tk.Label(drift_row, text="DRIFTOWYJEBATOR", bg="#161616", fg="#ff6b6b",
+                 font=("Segoe UI", 8, "bold")).pack(anchor="w")
+        drift_lbl = tk.Label(drift_row, text="0 px", bg="#161616", fg="#ffaa00",
+                             font=("Segoe UI", 8, "bold"), width=5)
+        drift_lbl.pack(side=tk.RIGHT)
+        drift_v = tk.IntVar(value=0)
+        def update_drift(val):
+            drift_lbl.config(text=f"{drift_v.get()} px")
+            if st["frames"] and st["tick"] < len(st["frame_offsets"]):
+                st["frame_offsets"][st["tick"]] = drift_v.get()
+                # Reassemble frame with new offset
+                img = st["img"]
+                raw = st["frames"]
+                fw, fh = st["fw"], st["fh"]
+                pivot = pivot_v.get()
+                frame_idx = st["tick"]
+                x, y, w, h = raw[frame_idx]
+                crop = img.crop((x, y, x + w, y + h))
+                canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+                if pivot == "bottom":
+                    px_off = (fw - w) // 2 + st["frame_offsets"][frame_idx]
+                    py_off = fh - h
+                elif pivot == "center":
+                    px_off = (fw - w) // 2 + st["frame_offsets"][frame_idx]
+                    py_off = (fh - h) // 2
+                else:
+                    px_off = st["frame_offsets"][frame_idx]
+                    py_off = 0
+                canvas.paste(crop, (px_off, py_off), crop)
+                st["uniform"][frame_idx] = canvas
+                show_frame(st["tick"])
+        tk.Scale(lp, variable=drift_v, from_=-50, to=50, orient=tk.HORIZONTAL,
+                 bg="#161616", fg="white", showvalue=False, length=340,
+                 command=update_drift).pack(fill=tk.X, padx=8, pady=(0, 4))
 
         hlbl(lp, "ZAPISZ DO BIBLIOTEKI ANIMATORATORA")
         sf = tk.Frame(lp, bg="#161616"); sf.pack(fill=tk.X, padx=8, pady=2)
@@ -724,19 +765,20 @@ class GamifikatorEditor:
             fw = max(f[2] for f in raw)
             fh = max(f[3] for f in raw)
             st["frames"] = raw; st["fw"] = fw; st["fh"] = fh
+            st["frame_offsets"] = [0] * len(raw)  # X offset per frame
             pivot = pivot_v.get()
             uniform = []
-            for (x, y, w, h) in raw:
+            for frame_idx, (x, y, w, h) in enumerate(raw):
                 crop = img.crop((x, y, x + w, y + h))
                 canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
                 if pivot == "bottom":
-                    px_off = (fw - w) // 2
+                    px_off = (fw - w) // 2 + st["frame_offsets"][frame_idx]
                     py_off = fh - h
                 elif pivot == "center":
-                    px_off = (fw - w) // 2
+                    px_off = (fw - w) // 2 + st["frame_offsets"][frame_idx]
                     py_off = (fh - h) // 2
                 else:  # top-left
-                    px_off = 0
+                    px_off = st["frame_offsets"][frame_idx]
                     py_off = 0
                 canvas.paste(crop, (px_off, py_off), crop)
                 uniform.append(canvas)
@@ -819,8 +861,21 @@ class GamifikatorEditor:
             if not n:
                 return
             st["tick"] = (st["tick"] + 1) % n
+            drift_v.set(st["frame_offsets"][st["tick"]])
             show_frame(st["tick"])
             st["job"] = d.after(max(33, int(1000 / fps_v.get())), animate)
+
+        def prev_frame():
+            if st["uniform"]:
+                st["tick"] = (st["tick"] - 1) % len(st["uniform"])
+                drift_v.set(st["frame_offsets"][st["tick"]])
+                show_frame(st["tick"])
+
+        def next_frame():
+            if st["uniform"]:
+                st["tick"] = (st["tick"] + 1) % len(st["uniform"])
+                drift_v.set(st["frame_offsets"][st["tick"]])
+                show_frame(st["tick"])
 
         def toggle_play():
             if not st["uniform"]:
@@ -862,6 +917,8 @@ class GamifikatorEditor:
                     else:
                         st["selected_frames"] = set() if st["selected_frames"] == {fi} else {fi}
                     btn_del_frame.config(state=tk.NORMAL if st["selected_frames"] else tk.DISABLED)
+                    st["tick"] = fi
+                    drift_v.set(st["frame_offsets"][fi] if fi < len(st["frame_offsets"]) else 0)
                     show_frame(fi)
                     refresh_frames_grid()
                 lbl_img.bind("<Button-1>", _click)
