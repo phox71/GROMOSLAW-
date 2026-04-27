@@ -640,6 +640,22 @@ class GamifikatorEditor:
                  bg="#0d0d0d", fg="white", showvalue=False,
                  command=lambda v: tol_val_lbl.config(text=v)).pack(fill=tk.X, padx=4, pady=(0, 6))
 
+        pivot_row = tk.Frame(rp, bg="#0d0d0d"); pivot_row.pack(fill=tk.X, padx=4, pady=(2, 6))
+        tk.Label(pivot_row, text="Pivot / Kotwica:", bg="#0d0d0d", fg="#aaa",
+                 font=("Segoe UI", 8)).pack(side=tk.LEFT)
+        self._help_btn(pivot_row, "Punkt zakotwiczenia klatek przy składaniu animacji.\n"
+                       "Dół-środek — stopy w miejscu (do chodzenia).\n"
+                       "Środek — środek sprite'a w miejscu.\n"
+                       "Góra-lewo — bez wyrównania.").pack(side=tk.LEFT, padx=4)
+        pivot_v = tk.StringVar(value="bottom")
+        for val, lbl_txt in [("bottom", "Dół-środek"), ("center", "Środek"), ("topleft", "Góra-lewo")]:
+            tk.Radiobutton(pivot_row, text=lbl_txt, variable=pivot_v, value=val,
+                           bg="#0d0d0d", fg="#ccc", selectcolor="#1a5c1a",
+                           activebackground="#0d0d0d", activeforeground="white",
+                           font=("Segoe UI", 8),
+                           command=lambda: do_detect() if st["img"] else None
+                           ).pack(side=tk.LEFT, padx=4)
+
         fr_bar = tk.Frame(rp, bg="#0d0d0d"); fr_bar.pack(fill=tk.X, padx=4, pady=(6, 2))
         rhlbl2 = tk.Label(fr_bar, text="WYKRYTE KLATKI", bg="#0d0d0d", fg="#9B59B6",
                           font=("Segoe UI", 8, "bold")); rhlbl2.pack(side=tk.LEFT)
@@ -708,14 +724,24 @@ class GamifikatorEditor:
             fw = max(f[2] for f in raw)
             fh = max(f[3] for f in raw)
             st["frames"] = raw; st["fw"] = fw; st["fh"] = fh
+            pivot = pivot_v.get()
             uniform = []
             for (x, y, w, h) in raw:
                 crop = img.crop((x, y, x + w, y + h))
                 canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                canvas.paste(crop, ((fw - w) // 2, fh - h), crop)
+                if pivot == "bottom":
+                    px_off = (fw - w) // 2
+                    py_off = fh - h
+                elif pivot == "center":
+                    px_off = (fw - w) // 2
+                    py_off = (fh - h) // 2
+                else:  # top-left
+                    px_off = 0
+                    py_off = 0
+                canvas.paste(crop, (px_off, py_off), crop)
                 uniform.append(canvas)
             st["uniform"] = uniform; st["tick"] = 0
-            status_v.set(f"✓  Wykryto {len(raw)} klatek  |  Kontener: {fw}×{fh}px  |  Gotowe do zapisu")
+            status_v.set(f"✓  Wykryto {len(raw)} klatek  |  Kontener: {fw}×{fh}px  |  Pivot: {pivot_v.get()}  |  Gotowe do zapisu")
             refresh_frames_grid()
             show_frame(0)
 
@@ -755,11 +781,9 @@ class GamifikatorEditor:
             for (ys, ye) in strips:
                 strip = alpha[ys:ye, :]
                 for (xs, xe) in find_spans(strip.sum(axis=0)):
-                    slab = strip[:, xs:xe]
-                    rows = np.where(slab.sum(axis=1) > 0)[0]
-                    if len(rows):
-                        frames.append((xs, ys + int(rows[0]), xe - xs,
-                                       int(rows[-1]) - int(rows[0]) + 1))
+                    # Use full strip height — preserves vertical anchor point
+                    # so character feet don't bob when bounding box height varies per frame
+                    frames.append((xs, ys, xe - xs, ye - ys))
             return frames
 
         def show_frame(idx):
